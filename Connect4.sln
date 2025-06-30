@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36203.30
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Connect4", "Connect4\Connect4.csproj", "{644DEE1F-6BB3-450E-97BD-7AABAECFB6E4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{F11B64CD-725D-4618-96AD-693328F68EE9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeepNetwork", "DeepNetwork\DeepNetwork.csproj", "{C4C36450-9A6D-49D3-A543-20D6AAE2E44C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{644DEE1F-6BB3-450E-97BD-7AABAECFB6E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{644DEE1F-6BB3-450E-97BD-7AABAECFB6E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{644DEE1F-6BB3-450E-97BD-7AABAECFB6E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{644DEE1F-6BB3-450E-97BD-7AABAECFB6E4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F11B64CD-725D-4618-96AD-693328F68EE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F11B64CD-725D-4618-96AD-693328F68EE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F11B64CD-725D-4618-96AD-693328F68EE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F11B64CD-725D-4618-96AD-693328F68EE9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4C36450-9A6D-49D3-A543-20D6AAE2E44C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4C36450-9A6D-49D3-A543-20D6AAE2E44C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4C36450-9A6D-49D3-A543-20D6AAE2E44C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C4C36450-9A6D-49D3-A543-20D6AAE2E44C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {638120B7-9B3D-4D32-98E0-0549226A159F}
+	EndGlobalSection
+EndGlobal
