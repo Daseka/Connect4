@@ -7,7 +7,10 @@ public struct BitKey : IEquatable<BitKey>
     public ulong Low;
     private const int EndHigh = 128;
     private const int EndLow = 64;
-    private const int BoardSize = 85;
+    /* BoardSize = 3 times the board size of 42 
+     * empty, red player, yellow player, + 1 for 
+     * who played to create this boardstate*/
+    private const int BoardSize = 127; 
 
     public static int[] ToArray(string key)
     {

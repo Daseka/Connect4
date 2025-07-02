@@ -9,15 +9,15 @@ public partial class Form1 : Form
 {
     private const double MaximumError = 0.01;
     private const int MaxTrainingRuns = 5000;
-    private const int McstIterations = 200;
+    private const int McstIterations = 100;
     private const string OldPolicyNetwork = "old_policy_network.json";
     private const string OldValueNetwork = "old_value_network.json";
     private const int SelfPlayGames = 100;
     private readonly Connect4Game _connect4Game = new();
+    private readonly SimpleDumbNetwork _newPolicyNetwork;
+    private readonly SimpleDumbNetwork _newValueNetwork;
     private readonly System.Timers.Timer _timer = new() { Interval = 100 };
     private int _gamesPlayed = 0;
-    private SimpleDumbNetwork _newPolicyNetwork;
-    private SimpleDumbNetwork _newValueNetwork;
     private SimpleDumbNetwork _oldPolicyNetwork;
     private SimpleDumbNetwork _oldValueNetwork;
     private Mcts _redMcts;
@@ -35,10 +35,10 @@ public partial class Form1 : Form
         pictureBox1.Paint += PictureBox1_Paint;
         pictureBox1.Click += PictureBox1_Click;
 
-        _oldValueNetwork = new SimpleDumbNetwork([85, 95, 38, 1]);
-        _oldPolicyNetwork = new SimpleDumbNetwork([85, 124, 32, 7]);
-        _newValueNetwork = new SimpleDumbNetwork([85, 95, 38, 1]);
-        _newPolicyNetwork = new SimpleDumbNetwork([85, 124, 32, 7]);
+        _oldValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
+        _oldPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
+        _newValueNetwork = new SimpleDumbNetwork([127, 95, 38, 1]);
+        _newPolicyNetwork = new SimpleDumbNetwork([127, 124, 32, 7]);
 
         _oldValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
         _oldPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
@@ -158,6 +158,11 @@ public partial class Form1 : Form
         _timer.Start();
     }
 
+    private void Arena_Click(object sender, EventArgs e)
+    {
+        BattleArena();
+    }
+
     private void BattleArena()
     {
         // Perform self-play games between the two MCTS instances
@@ -171,7 +176,7 @@ public partial class Form1 : Form
         // Save the telemetry history of the red MCTS instance
         _redMcts.GetTelemetryHistory().SaveToFile();
 
-        Text = Text + " - Training";
+        Text += " - Training";
 
         // Train the red MCTS instance's networks
         TrainNetworks(_redMcts);
@@ -245,13 +250,13 @@ public partial class Form1 : Form
     private void SelfPlay(Mcts RedMcts, Mcts YellowMcts, Connect4Game game)
     {
         int count = 0;
-        var drawCount = 0;
-        var redWinCount = 0;
-        var yellowWinCount = 0;
+        int drawCount = 0;
+        int redWinCount = 0;
+        int yellowWinCount = 0;
 
         while (count < SelfPlayGames)
         {
-            var mcts = game.CurrentPlayer == (int)Player.Red
+            Mcts mcts = game.CurrentPlayer == (int)Player.Red
                 ? RedMcts
                 : YellowMcts;
 
@@ -279,6 +284,7 @@ public partial class Form1 : Form
                 {
                     yellowWinCount++;
                 }
+
                 DisplayStats(drawCount, redWinCount, yellowWinCount);
 
                 count++;
@@ -292,12 +298,12 @@ public partial class Form1 : Form
     private void SelfPlayButton_Click(object sender, EventArgs e)
     {
         int count = 0;
-        var drawCount = 0;
-        var redWinCount = 0;
-        var yellowWinCount = 0;
+        int drawCount = 0;
+        int redWinCount = 0;
+        int yellowWinCount = 0;
         while (count < SelfPlayGames)
         {
-            int compMove = _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1);
+            int compMove = _redMcts.GetBestMoveRandom(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1);
             if (compMove == -1)
             {
                 EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
@@ -320,6 +326,7 @@ public partial class Form1 : Form
                 {
                     yellowWinCount++;
                 }
+
                 DisplayStats(drawCount, redWinCount, yellowWinCount);
 
                 count++;
@@ -330,68 +337,85 @@ public partial class Form1 : Form
         DisplayStats(drawCount, redWinCount, yellowWinCount);
     }
 
-    private void TrainButton_Click(object sender, EventArgs e)
+    private Task TrainAsync()
     {
         _redMcts.GetTelemetryHistory().LoadFromFile();
-        //-----------------------
-        //Train the value network
-        (double[][] valueTrainingData, double[][] valueExpectedData) = _redMcts.GetTelemetryHistory().GetTrainingValueData();
+        ////-----------------------
+        ////Train the value network
+        //(double[][] valueTrainingData, double[][] valueExpectedData) = _redMcts.GetTelemetryHistory().GetTrainingValueData();
 
-        int run = 0;
-        int sameCount = 0;
-        double previousError = 0;
-        double error;
+        //int run = 0;
+        //int sameCount = 0;
+        //double previousError = 0;
+        //double error;
 
-        var valueTrainer = new NetworkTrainer(_oldValueNetwork);
+        //var valueTrainer = new NetworkTrainer(_oldValueNetwork);
 
-        var stopwatch = Stopwatch.StartNew();
-        do
-        {
-            error = valueTrainer.Train(valueTrainingData, valueExpectedData);
+        //var stopwatch = Stopwatch.StartNew();
+        //do
+        //{
+        //    error = valueTrainer.Train(valueTrainingData, valueExpectedData);
 
-            sameCount = previousError.Equals(error) ? sameCount + 1 : 0;
-            previousError = error;
-            run++;
-        }
-        while (run < MaxTrainingRuns && error > MaximumError && sameCount < 50);
-        stopwatch.Stop();
+        //    sameCount = previousError.Equals(error) ? sameCount + 1 : 0;
+        //    previousError = error;
+        //    run++;
+        //    Invoke(() =>
+        //    {
+        //        _ = listBox1.Items.Add($"Error {Math.Round(error, 3):F3}");
+        //        listBox1.TopIndex = listBox1.Items.Count - 1;
+        //    });
+        //}
+        //while (run < MaxTrainingRuns && error > MaximumError && sameCount < 50);
+        //stopwatch.Stop();
 
-        //_ = $"Training completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
-
+        //string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
+        //_ = Invoke(() => listBox1.Items.Add(x));
         ////Test the network 10 times
         //for (int i = 0; i < 10; i++)
         //{
         //    int index = i;
         //    double[] input = valueTrainingData[index];
-        //    double[] output = _ValueNetwork.Calculate(input);
+        //    double[] output = _oldValueNetwork.Calculate(input);
 
         //    //calculate the error
         //    double expected = valueExpectedData[index][0];
-        //    var diffrence = Math.Abs(expected - output[0]);
+        //    double diffrence = Math.Abs(expected - output[0]);
+        //    Invoke(() =>
+        //    {
+        //        _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
+        //        listBox1.TopIndex = listBox1.Items.Count - 1;
+        //    });
         //}
 
         //-----------------------
         //Train the policy network
         (double[][] policyTrainingData, double[][] policyExpectedData) = _redMcts.GetTelemetryHistory().GetTrainingPolicyData();
-        run = 0;
-        sameCount = 0;
-        previousError = 0;
+        int run2 = 0;
+        double sameCount2 = 0;
+        double previousError2 = 0;
+        double error2 = 0.0;
 
         var policyTrainer = new NetworkTrainer(_oldPolicyNetwork);
 
-        stopwatch = Stopwatch.StartNew();
+        var stopwatch2 = Stopwatch.StartNew();
         do
         {
-            error = policyTrainer.Train(policyTrainingData, policyExpectedData);
+            error2 = policyTrainer.Train(policyTrainingData, policyExpectedData);
 
-            sameCount = previousError.Equals(error) ? sameCount + 1 : 0;
-            previousError = error;
-            run++;
+            sameCount2 = previousError2.Equals(error2) ? sameCount2 + 1 : 0;
+            previousError2 = error2;
+            run2++;
+            Invoke(() =>
+            {
+                listBox1.Items.Add($"Error {Math.Round(error2, 3):F3}");
+                listBox1.TopIndex = listBox1.Items.Count - 1;
+            });
         }
-        while (run < MaxTrainingRuns && error > MaximumError && sameCount < 50);
-        stopwatch.Stop();
+        while (run2 < MaxTrainingRuns && error2 > MaximumError && sameCount2 < 50);
+        stopwatch2.Stop();
 
-        _ = $"Training completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
+        var text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2}";
+        listBox1.Items.Add(text);
 
         //Test the network 10 times
         for (int i = 0; i < 10; i++)
@@ -403,11 +427,18 @@ public partial class Form1 : Form
             //calculate the error
             double expected = policyExpectedData[index][0];
             var diffrence = Math.Abs(expected - output[0]);
+            Invoke(() =>
+            {
+                listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
+                listBox1.TopIndex = listBox1.Items.Count - 1;
+            });
         }
+
+        return Task.CompletedTask;
     }
 
-    private void Arena_Click(object sender, EventArgs e)
+    private async void TrainButton_Click(object sender, EventArgs e)
     {
-        BattleArena();
+        await Task.Run(TrainAsync);
     }
 }

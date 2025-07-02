@@ -10,6 +10,7 @@ public class Mcts(
     Random? random = null)
 {
     private const int MaxColumnCount = 7;
+    private const int MaxIterationsRandom = 100;
     private readonly int _maxIterations = maxIterations;
     private readonly Random _random = random ?? new();
     private TelemetryHistory _telemetryHistory = new();
@@ -21,7 +22,7 @@ public class Mcts(
     {
         var rootNode = new Node(gameBoard.Copy(), previousPlayer);
 
-        for (int i = 0; i < 20000; i++)
+        for (int i = 0; i < MaxIterationsRandom; i++)
         {
             Node? childNode = Select(rootNode, _random);
 

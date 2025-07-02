@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using MathNet.Numerics.LinearAlgebra;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace DeepNetwork;
@@ -6,6 +7,7 @@ namespace DeepNetwork;
 [Serializable]
 public class SimpleDumbNetwork
 {
+    public IActivationFunction[] ActivationFunctions;
     public double[][] DeltaValues;
     public double[][][] Gradients;
     public double[][][] PreviousGradients;
@@ -13,8 +15,6 @@ public class SimpleDumbNetwork
     public double[][][] UpdateValues;
     public double[][] Values;
     public double[][][] Weights;
-    public IActivationFunction[] ActivationFunctions;
-
     private const int MaximumStepSize = 50;
     private const double MinimumStepSize = 1e-6d;
     private const double NearNullValue = 1e-11d;
@@ -32,6 +32,8 @@ public class SimpleDumbNetwork
         Values = new double[structure.Count][];
         DeltaValues = new double[structure.Count][];
 
+        // Weights arrays describe the connections between layers.
+        // the arrays are [LayerInbetweenValueLayers][NodeInValueLayer + 1][Weight]
         Weights = new double[structure.Count - 1][][];
         Gradients = new double[structure.Count - 1][][];
         PreviousGradients = new double[structure.Count - 1][][];
@@ -43,7 +45,7 @@ public class SimpleDumbNetwork
             ActivationFunctions[i] = i == structure.Count - 1
                 ? new SigmoidActivationFunction()
                 : new TanhActivationFunction();
-                //: new LeakyReLUActivationFunction();
+            //: new LeakyReLUActivationFunction();
 
             Values[i] = new double[structure[i]];
             DeltaValues[i] = new double[structure[i]];
@@ -57,18 +59,33 @@ public class SimpleDumbNetwork
             PreviousWeightChange[i] = new double[Values[i + 1].Length][];
             UpdateValues[i] = new double[Values[i + 1].Length][];
 
+            int neuronCount = Values[i].Length;
+            int nextNeuronCount = Values[i + 1].Length;
+            double beta = 0.7 * Math.Pow(nextNeuronCount, 1.0 / neuronCount);
+
             for (int j = 0; j < Weights[i].Length; j++)
             {
-                Weights[i][j] = new double[Values[i].Length];
-                Gradients[i][j] = new double[Values[i].Length];
-                PreviousGradients[i][j] = new double[Values[i].Length];
-                PreviousWeightChange[i][j] = new double[Values[i].Length];
-                UpdateValues[i][j] = new double[Values[i].Length];
+                Weights[i][j] = new double[neuronCount];
+                Gradients[i][j] = new double[neuronCount];
+                PreviousGradients[i][j] = new double[neuronCount];
+                PreviousWeightChange[i][j] = new double[neuronCount];
+                UpdateValues[i][j] = new double[neuronCount];
 
-                for (int k = 0; k < Weights[i][j].Length; k++)
+                // Nguyen-Widrow: random in [-0.5, 0.5]
+                double norm = 0.0;
+                for (int k = 0; k < neuronCount; k++)
                 {
-                    Weights[i][j][k] = (double)_random.NextDouble() * MathF.Sqrt(2f / Weights[i][j].Length);
+                    Weights[i][j][k] = _random.NextDouble() - 0.5;
+                    norm += Weights[i][j][k] * Weights[i][j][k];
                     UpdateValues[i][j][k] = 0.1;
+                }
+                norm = Math.Sqrt(norm);
+                if (norm > 0)
+                {
+                    for (int k = 0; k < neuronCount; k++)
+                    {
+                        Weights[i][j][k] = beta * Weights[i][j][k] / norm;
+                    }
                 }
             }
         }
@@ -85,7 +102,7 @@ public class SimpleDumbNetwork
         var jObject = JObject.Parse(json);
 
         // Read structure from Values array
-        var valuesArray = jObject[nameof(Values)]!.ToObject<double[][]>()!;
+        double[][] valuesArray = jObject[nameof(Values)]!.ToObject<double[][]>()!;
         int[] structure = [.. valuesArray.Select(arr => arr.Length)];
 
         var network = new SimpleDumbNetwork(structure)
@@ -100,7 +117,7 @@ public class SimpleDumbNetwork
         };
 
         // Restore activation functions
-        var activationFunctionTypes = jObject["ActivationFunctionTypes"]!.ToObject<string[]>()!;
+        string[] activationFunctionTypes = jObject["ActivationFunctionTypes"]!.ToObject<string[]>()!;
         for (int i = 0; i < activationFunctionTypes.Length; i++)
         {
             network.ActivationFunctions[i] = activationFunctionTypes[i] switch
@@ -133,6 +150,36 @@ public class SimpleDumbNetwork
         }
 
         return Values[^1];
+
+        //for (int node = 0; node < Values[0].Length; node++)
+        //{
+        //    Values[0][node] = input[node];
+        //}
+
+        //for (int layer = 1; layer < Values.Length; layer++)
+        //{
+        //    var inputVector = Vector<double>.Build.DenseOfArray(Values[layer - 1]);
+        //    var weightMatrix = Matrix<double>.Build.DenseOfRowArrays(Weights[layer - 1]);
+        //    var sums = weightMatrix * inputVector;
+
+        //    for (int node = 0; node < Values[layer].Length; node++)
+        //    {
+        //        Values[layer][node] = ActivationFunctions[layer].Calculate(sums[node]);
+        //    }
+        //}
+
+        //return [.. Values[^1]];
+    }
+
+    private static double Sum(double[] values, IReadOnlyList<double> weights)
+    {
+        double result = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            result += values[i] * weights[i];
+        }
+
+        return result;
     }
 
     public SimpleDumbNetwork Clone()
@@ -173,6 +220,34 @@ public class SimpleDumbNetwork
         {
             //Set values using training data
             _ = Calculate(trainingInputs[i]);
+
+            ////Calculate Gradients
+            //var output = Vector<double>.Build.DenseOfArray(Values[^1]);
+            //var target = Vector<double>.Build.DenseOfArray(trainingOutputs[i]);
+            //var deltaV = (target - output).PointwiseMultiply(output.Map(ActivationFunctions[^1].Derivative));
+            //DeltaValues[^1] = [.. deltaV];
+
+            //double[][] dvals = new double[DeltaValues.Length][];
+            //for (int layer = Values.Length - 2; layer >= 1; layer--)
+            //{
+            //    var weights = Matrix<double>.Build.DenseOfRowArrays(Weights[layer]);
+            //    var nextDelta = Vector<double>.Build.DenseOfArray(DeltaValues[layer + 1]);
+            //    var value = Vector<double>.Build.DenseOfArray(Values[layer]);
+            //    // Multiply weights^T * nextDelta
+            //    var sum = weights.TransposeThisAndMultiply(nextDelta);
+            //    var deltavalues = sum.PointwiseMultiply(value.Map(ActivationFunctions[layer].Derivative));
+            //    DeltaValues[layer] = [.. deltavalues];
+            //}
+
+            //for (int layer = 0; layer < Weights.Length; layer++)
+            //{
+            //    var delta = Vector<double>.Build.DenseOfArray(DeltaValues[layer + 1]);
+            //    var prevValues = Vector<double>.Build.DenseOfArray(Values[layer]);
+            //    var grad = delta.OuterProduct(prevValues); // Matrix: [node][prevNode]
+            //    for (int node = 0; node < Gradients[layer].Length; node++)
+            //        for (int prevNode = 0; prevNode < Gradients[layer][node].Length; prevNode++)
+            //            Gradients[layer][node][prevNode] += grad[node, prevNode];
+            //}
 
             // Calculate Gradients
             for (int node = 0; node < DeltaValues[^1].Length; node++)
@@ -229,7 +304,7 @@ public class SimpleDumbNetwork
     public void SaveToFile(string fileName)
     {
         // Serialize activation function types as strings
-        var activationFunctionTypes = ActivationFunctions
+        string[] activationFunctionTypes = ActivationFunctions
             .Select(f => f.GetType().Name)
             .ToArray();
 
@@ -279,23 +354,7 @@ public class SimpleDumbNetwork
 
     private static int Sign(double value)
     {
-        if (Math.Abs(value) < NearNullValue)
-        {
-            return 0;
-        }
-
-        return value > 0 ? 1 : -1;
-    }
-
-    private static double Sum(double[] values, IReadOnlyList<double> weights)
-    {
-        double result = 0;
-        for (int i = 0; i < values.Length; i++)
-        {
-            result += values[i] * weights[i];
-        }
-
-        return result;
+        return Math.Abs(value) < NearNullValue ? 0 : value > 0 ? 1 : -1;
     }
 
     private double UpdateWeight(

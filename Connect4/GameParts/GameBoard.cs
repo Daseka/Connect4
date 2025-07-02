@@ -6,7 +6,7 @@ public class GameBoard
 {
     public const int Columns = 7;
     public const int Rows = 6;
-    private const int Players = 2;
+    private const int CellStates = 3;
     private const int LastToPlay = 1;
 
     public int[,] Board { get; private set; }
@@ -71,10 +71,9 @@ public class GameBoard
 
     public string StateToString()
     {
-        var data = new char[Board.Length * Players + LastToPlay];
-        char empty = '0';
-        char filled = '1';
-        Array.Fill(data, empty);
+        var data = new char[Board.Length * CellStates + LastToPlay];
+        const char filled = '1';
+        Array.Fill(data, '0');
 
         int index = 0;
         foreach (var item in Board)
@@ -87,6 +86,11 @@ public class GameBoard
             {
                 data[index + Board.Length] = filled;
             }
+            else /*if empty spot*/
+            {
+                data[index + Board.Length * 2] = filled;
+            }
+
             index++;
         }
 
@@ -97,18 +101,22 @@ public class GameBoard
 
     public int[] StateToArray()
     {
-        var data = new int[Board.Length * Players + LastToPlay];
+        var data = new int[Board.Length * CellStates + LastToPlay];
 
         int index = 0;
         foreach (var item in Board)
         {
-            if (item == 1)
+            if (item == (int)Player.Red)
             {
                 data[index] = 1;
             }
-            else if (item == 2)
+            else if (item == (int)Player.Yellow)
             {
                 data[index + Board.Length] = 1;
+            }
+            else /*if empty spot*/
+            {
+                data[index + Board.Length * 2] = 1;
             }
             index++;
         }
