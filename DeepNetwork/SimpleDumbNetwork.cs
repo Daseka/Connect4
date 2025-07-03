@@ -7,6 +7,7 @@ namespace DeepNetwork;
 [Serializable]
 public class SimpleDumbNetwork
 {
+    public bool Trained;
     public IActivationFunction[] ActivationFunctions;
     public double[][] DeltaValues;
     public double[][][] Gradients;
@@ -114,6 +115,7 @@ public class SimpleDumbNetwork
             UpdateValues = jObject[nameof(UpdateValues)]!.ToObject<double[][][]>(),
             Values = valuesArray,
             Weights = jObject[nameof(Weights)]!.ToObject<double[][][]>(),
+            Trained = true
         };
 
         // Restore activation functions

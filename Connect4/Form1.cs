@@ -303,7 +303,7 @@ public partial class Form1 : Form
         int yellowWinCount = 0;
         while (count < SelfPlayGames)
         {
-            int compMove = _redMcts.GetBestMoveRandom(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1);
+            int compMove = _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1);
             if (compMove == -1)
             {
                 EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);

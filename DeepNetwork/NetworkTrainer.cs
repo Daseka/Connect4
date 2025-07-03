@@ -67,7 +67,7 @@ public class NetworkTrainer
         _network.Error = totalError / threads;
 
         _network.UpdateWeights();
-
+        _network.Trained = true;
         _network.LastError = _network.Error;
 
         return _network.Error;

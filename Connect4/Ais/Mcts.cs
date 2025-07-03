@@ -39,12 +39,18 @@ public class Mcts(
     public int GetBestMove(GameBoard gameBoard, int previousPlayer)
     {
         var rootNode = new Node(gameBoard.Copy(), previousPlayer);
+        bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
         for (int i = 0; i < _maxIterations; i++)
         {
-            Node? childNode = Select(rootNode, _random, PolicyNetwork);
+            
+            Node? childNode = useNetworks
+                ? Select(rootNode, _random, PolicyNetwork)
+                : Select(rootNode, _random);
 
-            int result = Simulate(childNode, _random, ValueNetwork);
+            int result = useNetworks
+                ? Simulate(childNode, _random, ValueNetwork)
+                : Simulate(childNode, _random);
 
             Backpropagate(childNode, result);
         }
