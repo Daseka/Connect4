@@ -69,12 +69,8 @@ public class Node
 
         foreach (Node node in Children)
         {
-            node.Ucb = node.Wins / node.Visits 
+            node.Ucb = node.Wins / (node.Visits == 0? 1 : node.Visits)
                 + ExplorationConstant * policyProbability[node.Move] * Math.Sqrt((node.Parent?.Visits ?? 1) / (1 + node.Visits));
-
-            //node.Ucb = node.Visits == 0
-            //    ? double.MaxValue
-            //    : node.Wins / node.Visits + ExplorationConstant * Math.Sqrt(Math.Log(node.Parent?.Visits ?? 1) / node.Visits);
 
             if (node.Ucb > currentMaxUcb)
             {
@@ -91,12 +87,12 @@ public class Node
         return Children.Count == 0;
     }
 
-    public void Update(int result)
+    public void Update(double result)
     {
         ++Visits;
         if (result == PLayerWhoMadeMove)
         {
-            ++Wins;
+            Wins += result > 0 ? result : 1 + result;
         }
     }
 }

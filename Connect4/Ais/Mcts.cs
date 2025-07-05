@@ -26,7 +26,7 @@ public class Mcts(
         {
             Node? childNode = Select(rootNode, _random);
 
-            int result = Simulate(childNode, _random);
+            double result = Simulate(childNode, _random);
 
             Backpropagate(childNode, result);
         }
@@ -36,19 +36,19 @@ public class Mcts(
         return rootNode.GetBestChild()?.Move ?? -1;
     }
 
-    public int GetBestMove(GameBoard gameBoard, int previousPlayer)
+    public Task<int> GetBestMove(GameBoard gameBoard, int previousPlayer)
     {
         var rootNode = new Node(gameBoard.Copy(), previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
         for (int i = 0; i < _maxIterations; i++)
         {
-            
+            //Node? childNode = Select(rootNode, _random);
             Node? childNode = useNetworks
                 ? Select(rootNode, _random, PolicyNetwork)
                 : Select(rootNode, _random);
 
-            int result = useNetworks
+            double result = useNetworks
                 ? Simulate(childNode, _random, ValueNetwork)
                 : Simulate(childNode, _random);
 
@@ -57,7 +57,11 @@ public class Mcts(
 
         UpdateTelemeryHistory(rootNode, _telemetryHistory);
 
-        return rootNode.GetBestChild(PolicyNetwork)?.Move ?? -1;
+        var bestChild = useNetworks
+            ? rootNode.GetBestChild(PolicyNetwork)
+            : rootNode.GetBestChild();
+
+        return Task.FromResult(bestChild?.Move ?? -1);
     }
 
     public TelemetryHistory GetTelemetryHistory()
@@ -70,25 +74,24 @@ public class Mcts(
         _telemetryHistory.StoreWinnerData(winner);
     }
 
-    private static void Backpropagate(Node node, int result)
+    private static void Backpropagate(Node node, double result)
     {
         Node? currentNode = node;
         while (currentNode != null)
         {
             currentNode.Update(result);
+            result *= -1; 
 
             currentNode = currentNode.Parent;
         }
     }
 
-    private static int DeepSimulation(Node node, SimpleDumbNetwork valueNetwork)
+    private static double DeepSimulation(Node node, SimpleDumbNetwork valueNetwork)
     {
         double[] boardStateArray = [.. node.GameBoard.StateToArray().Select(x => (double)x)];
         double winProbability = valueNetwork.Calculate(boardStateArray).First();
 
-        return winProbability > 0.5
-            ? (int)Winner.Red
-            : (int)Winner.Yellow;
+        return winProbability;
     }
 
     private static Node Expand(Node node, Random random)
@@ -119,7 +122,7 @@ public class Mcts(
             : node;
     }
 
-    private static int RandomSimulation(Node node, Random random)
+    private static double RandomSimulation(Node node, Random random)
     {
         // Check if the game was won by the selected moved of the node
         int previousPlayer = node.PLayerWhoMadeMove;
@@ -205,12 +208,12 @@ public class Mcts(
         return bestChild ?? node;
     }
 
-    private static int Simulate(Node node, Random random)
+    private static double Simulate(Node node, Random random)
     {
         return RandomSimulation(node, random);
     }
 
-    private static int Simulate(Node node, Random random, SimpleDumbNetwork? valueNetwork)
+    private static double Simulate(Node node, Random random, SimpleDumbNetwork? valueNetwork)
     {
         return DeepSimulation(node, valueNetwork);
     }

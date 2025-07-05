@@ -5,6 +5,7 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
+    public  int Count { get; private set; }
     private const string TelemetryHistoryFileName = "telemetry_history.json";
     private List<int[]> _boardState = [];
     private readonly Dictionary<string, List<double[]>> _policies = [];
@@ -82,6 +83,7 @@ public class TelemetryHistory
         }
 
         _boardState.Add(state);
+        Count++;
     }
 
     public void ClearAll()
@@ -89,6 +91,7 @@ public class TelemetryHistory
         _boardState.Clear();
         _policies.Clear();
         BoardStateHistoricalInfos.Clear();
+        Count = 0;
     }
 
     public void StoreWinnerData(Winner winner)
