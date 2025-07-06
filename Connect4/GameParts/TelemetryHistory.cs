@@ -5,12 +5,16 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
-    public  int Count { get; private set; }
+    private const int MaxBufferSize = 500000;
     private const string TelemetryHistoryFileName = "telemetry_history.json";
+    private readonly Queue<string> _insertionOrder = new();
     private List<int[]> _boardState = [];
     private readonly Dictionary<string, List<double[]>> _policies = [];
+    private readonly Random _random = new();
 
     public Dictionary<string, BoardStateHistoricInfo> BoardStateHistoricalInfos { get; set; } = [];
+
+    public int Count { get; private set; }
 
     public void LoadFromFile()
     {
@@ -25,41 +29,119 @@ public class TelemetryHistory
         TelemetryHistory? loaded = JsonConvert.DeserializeObject<TelemetryHistory>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
+
+        if (loaded != null)
+        {
+            foreach (var key in loaded.BoardStateHistoricalInfos.Keys)
+            {
+                _insertionOrder.Enqueue(key);
+            }
+            Count = BoardStateHistoricalInfos.Count;
+        }
     }
 
-    public (double[][] input, double[][] output) GetTrainingPolicyData()
+    public (double[][] input, double[][] output) GetTrainingPolicyData(int? count = null)
     {
-        double[][] trainingData = new double[BoardStateHistoricalInfos.Count][];
-        double[][] expectedPolicies = new double[BoardStateHistoricalInfos.Count][];
-        int index = 0;
-
-        foreach (BoardStateHistoricInfo info in BoardStateHistoricalInfos.Values)
+        if (BoardStateHistoricalInfos.Count == 0)
         {
-            trainingData[index] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
-            expectedPolicies[index] = info.Policy;
-            index++;
+            return (Array.Empty<double[]>(), Array.Empty<double[]>());
         }
 
-        return (trainingData, expectedPolicies);
+        int sampleCount = count.HasValue ? Math.Min(count.Value, BoardStateHistoricalInfos.Count) : BoardStateHistoricalInfos.Count;
+        string[] keys = [.. BoardStateHistoricalInfos.Keys];
+
+        if (sampleCount == keys.Length)
+        {
+            double[][] trainingData = new double[sampleCount][];
+            double[][] expectedPolicies = new double[sampleCount][];
+            int index = 0;
+
+            foreach (BoardStateHistoricInfo info in BoardStateHistoricalInfos.Values)
+            {
+                trainingData[index] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+                expectedPolicies[index] = info.Policy;
+                index++;
+            }
+
+            return (trainingData, expectedPolicies);
+        }
+
+        List<string> randomKeys = RandomSampleWithoutReplacement(keys, sampleCount);
+
+        double[][] sampledTrainingData = new double[sampleCount][];
+        double[][] sampledExpectedPolicies = new double[sampleCount][];
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            BoardStateHistoricInfo info = BoardStateHistoricalInfos[randomKeys[i]];
+            sampledTrainingData[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+            sampledExpectedPolicies[i] = info.Policy;
+        }
+
+        return (sampledTrainingData, sampledExpectedPolicies);
     }
 
-    public (double[][] input, double[][] output) GetTrainingValueData()
+    public (double[][] input, double[][] output) GetTrainingValueData(int? count = null)
     {
-        double[][] trainingData = new double[BoardStateHistoricalInfos.Count][];
-        double[][] expectedValues = new double[BoardStateHistoricalInfos.Count][];
-        int index = 0;
-
-        foreach (BoardStateHistoricInfo info in BoardStateHistoricalInfos.Values)
+        if (BoardStateHistoricalInfos.Count == 0)
         {
-            trainingData[index] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+            return (Array.Empty<double[]>(), Array.Empty<double[]>());
+        }
+
+        int sampleCount = count.HasValue 
+            ? Math.Min(count.Value, BoardStateHistoricalInfos.Count) 
+            : BoardStateHistoricalInfos.Count;
+
+        string[] keys = [.. BoardStateHistoricalInfos.Keys];
+
+        if (sampleCount == keys.Length)
+        {
+            double[][] trainingData = new double[sampleCount][];
+            double[][] expectedValues = new double[sampleCount][];
+            int index = 0;
+
+            foreach (BoardStateHistoricInfo info in BoardStateHistoricalInfos.Values)
+            {
+                trainingData[index] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+                double totalGames = info.RedWins + info.YellowWins + info.Draws;
+                expectedValues[index] = trainingData[index][^1] == (double)Player.Red
+                    ? [info.RedWins / totalGames,]
+                    : [info.YellowWins / totalGames,];
+                index++;
+            }
+
+            return (trainingData, expectedValues);
+        }
+
+        List<string> randomKeys = RandomSampleWithoutReplacement(keys, sampleCount);
+
+        double[][] sampledTrainingData = new double[sampleCount][];
+        double[][] sampledExpectedValues = new double[sampleCount][];
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            BoardStateHistoricInfo info = BoardStateHistoricalInfos[randomKeys[i]];
+            sampledTrainingData[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
             double totalGames = info.RedWins + info.YellowWins + info.Draws;
-            expectedValues[index] = trainingData[index][^1] == (double)Player.Red
+            sampledExpectedValues[i] = sampledTrainingData[i][^1] == (double)Player.Red
                 ? [info.RedWins / totalGames,]
                 : [info.YellowWins / totalGames,];
-            index++;
         }
 
-        return (trainingData, expectedValues);
+        return (sampledTrainingData, sampledExpectedValues);
+    }
+
+    private List<string> RandomSampleWithoutReplacement(string[] population, int sampleSize)
+    {
+        List<string> result = [.. population];
+
+        for (int i = 0; i < sampleSize; i++)
+        {
+            int j = _random.Next(i, result.Count);
+            (result[i], result[j]) = (result[j], result[i]);
+        }
+
+        return [.. result.Take(sampleSize)];
     }
 
     public void SaveToFile()
@@ -75,7 +157,6 @@ public class TelemetryHistory
         if (_policies.TryGetValue(BitKey.ToKey(state), out List<double[]>? existingPolicy))
         {
             existingPolicy.Add(policy);
-
         }
         else
         {
@@ -91,24 +172,34 @@ public class TelemetryHistory
         _boardState.Clear();
         _policies.Clear();
         BoardStateHistoricalInfos.Clear();
+        _insertionOrder.Clear();
         Count = 0;
+    }
+
+    private void EnforceBufferLimit()
+    {
+        while (_insertionOrder.Count > MaxBufferSize)
+        {
+            string oldestKey = _insertionOrder.Dequeue();
+            BoardStateHistoricalInfos.Remove(oldestKey);
+        }
     }
 
     public void StoreWinnerData(Winner winner)
     {
         foreach (int[] boardState in _boardState)
         {
-
             string key = BitKey.ToKey(boardState);
 
-            // add the board state 
             if (!BoardStateHistoricalInfos.TryGetValue(key, out BoardStateHistoricInfo? value))
             {
                 value = new BoardStateHistoricInfo(key);
                 BoardStateHistoricalInfos[key] = value;
+
+                _insertionOrder.Enqueue(key);
+                EnforceBufferLimit();
             }
 
-            // add the averages of the policies
             if (_policies.TryGetValue(key, out List<double[]>? policies))
             {
                 double[] averagePolicy = new double[policies[0].Length];
@@ -128,7 +219,6 @@ public class TelemetryHistory
                 value.Policy = averagePolicy;
             }
 
-            // add the winnder data
             if (winner == Winner.Red)
             {
                 value.RedWins++;

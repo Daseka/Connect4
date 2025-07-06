@@ -9,10 +9,10 @@ public partial class Form1 : Form
 {
     private const double MaximumError = 0.01;
     private const int MaxTrainingRuns = 5000;
-    private const int McstIterations = 10000;
+    private const int McstIterations = 800;
     private const string OldPolicyNetwork = "old_policy_network.json";
     private const string OldValueNetwork = "old_value_network.json";
-    private const int SelfPlayGames = 1000;
+    private const int SelfPlayGames = 100;
     private readonly Connect4Game _connect4Game = new();
     private readonly SimpleDumbNetwork _newPolicyNetwork;
     private readonly SimpleDumbNetwork _newValueNetwork;
@@ -21,8 +21,8 @@ public partial class Form1 : Form
     private SimpleDumbNetwork _oldPolicyNetwork;
     private SimpleDumbNetwork _oldValueNetwork;
     private Mcts _redMcts;
-    private Mcts _yellowMcts;
     private int _TimesLeftWithRandomYellow;
+    private Mcts _yellowMcts;
 
     public Form1()
     {
@@ -115,9 +115,11 @@ public partial class Form1 : Form
         int yellowWinCount = 0;
 
         TelemetryHistory telemetryHistory = RedMcts.GetTelemetryHistory();
+        bool ended = false;
 
-        while (count < SelfPlayGames)
+        while (telemetryHistory.Count < SelfPlayGames || !ended)
         {
+            ended = false;
             Mcts mcts = game.CurrentPlayer == (int)Player.Red
                 ? RedMcts
                 : YellowMcts;
@@ -126,9 +128,11 @@ public partial class Form1 : Form
             if (move == -1)
             {
                 EndGame(game, mcts, listBox, pictureBox);
+                ended = true;
 
                 drawCount++;
                 count++;
+                
                 DisplayStats(drawCount, redWinCount, yellowWinCount, count, form);
 
                 continue;
@@ -138,6 +142,8 @@ public partial class Form1 : Form
             if (winner != 0)
             {
                 EndGame(game, mcts, listBox, pictureBox);
+                ended |= true;
+
                 if (winner == 1)
                 {
                     redWinCount++;
@@ -212,7 +218,6 @@ public partial class Form1 : Form
 
             TelemetryHistory telemetryHistory = _redMcts.GetTelemetryHistory();
             telemetryHistory.SaveToFile();
-            telemetryHistory.ClearAll();
         }
     }
 
@@ -278,14 +283,15 @@ public partial class Form1 : Form
         mcts.GetTelemetryHistory().LoadFromFile();
         //-----------------------
         //Train the value network
-        (double[][] valueTrainingData, double[][] valueExpectedData) = mcts.GetTelemetryHistory().GetTrainingValueData();
-
+        (double[][] valueTrainingData, double[][] valueExpectedData) = mcts
+            .GetTelemetryHistory()
+            .GetTrainingValueData(2000);
+        
         int run = 0;
         int sameCount = 0;
         double previousError = 0;
         double error;
 
-        
         var valueTrainer = new NetworkTrainer(mcts.ValueNetwork);
 
         var stopwatch = Stopwatch.StartNew();
