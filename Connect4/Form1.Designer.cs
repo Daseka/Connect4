@@ -10,7 +10,7 @@
         /// <summary>
         ///  Clean up any resources being used.
         /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
+        /// <param name="disposing">true if managed resources should be disposed; otherwise.</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -36,13 +36,17 @@
             button3 = new Button();
             button4 = new Button();
             button5 = new Button();
+            flowLayoutPanel1 = new FlowLayoutPanel();
+            statusStrip1 = new StatusStrip();
+            toolStripStatusLabel1 = new ToolStripStatusLabel();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
+            statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
             // pictureBox1
             // 
             pictureBox1.BackColor = Color.Black;
-            pictureBox1.Location = new Point(12, 82);
+            pictureBox1.Location = new Point(12, 48);
             pictureBox1.Name = "pictureBox1";
             pictureBox1.Size = new Size(613, 356);
             pictureBox1.TabIndex = 0;
@@ -53,16 +57,16 @@
             checkBox1.AutoSize = true;
             checkBox1.Location = new Point(16, 23);
             checkBox1.Name = "checkBox1";
-            checkBox1.Size = new Size(82, 19);
+            checkBox1.Size = new Size(77, 19);
             checkBox1.TabIndex = 1;
-            checkBox1.Text = "checkBox1";
+            checkBox1.Text = "Auto Play";
             checkBox1.UseVisualStyleBackColor = true;
             // 
             // listBox1
             // 
             listBox1.FormattingEnabled = true;
             listBox1.ItemHeight = 15;
-            listBox1.Location = new Point(706, 82);
+            listBox1.Location = new Point(648, 55);
             listBox1.Name = "listBox1";
             listBox1.ScrollAlwaysVisible = true;
             listBox1.Size = new Size(919, 349);
@@ -102,9 +106,9 @@
             // 
             button4.Location = new Point(949, 23);
             button4.Name = "button4";
-            button4.Size = new Size(75, 23);
+            button4.Size = new Size(100, 23);
             button4.TabIndex = 6;
-            button4.Text = "Self Play";
+            button4.Text = "Parallel Play";
             button4.UseVisualStyleBackColor = true;
             button4.Click += SelfPlayButton_Click;
             // 
@@ -118,11 +122,40 @@
             button5.UseVisualStyleBackColor = true;
             button5.Click += Arena_Click;
             // 
+            // flowLayoutPanel1
+            // 
+            flowLayoutPanel1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            flowLayoutPanel1.AutoScroll = true;
+            flowLayoutPanel1.BackColor = SystemColors.Control;
+            flowLayoutPanel1.BorderStyle = BorderStyle.Fixed3D;
+            flowLayoutPanel1.Location = new Point(12, 456);
+            flowLayoutPanel1.Name = "flowLayoutPanel1";
+            flowLayoutPanel1.Padding = new Padding(5);
+            flowLayoutPanel1.Size = new Size(1613, 400);
+            flowLayoutPanel1.TabIndex = 8;
+            // 
+            // statusStrip1
+            // 
+            statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripStatusLabel1 });
+            statusStrip1.Location = new Point(0, 859);
+            statusStrip1.Name = "statusStrip1";
+            statusStrip1.Size = new Size(1637, 22);
+            statusStrip1.TabIndex = 9;
+            statusStrip1.Text = "statusStrip1";
+            // 
+            // toolStripStatusLabel1
+            // 
+            toolStripStatusLabel1.Name = "toolStripStatusLabel1";
+            toolStripStatusLabel1.Size = new Size(39, 17);
+            toolStripStatusLabel1.Text = "Ready";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1637, 450);
+            ClientSize = new Size(1637, 881);
+            Controls.Add(statusStrip1);
+            Controls.Add(flowLayoutPanel1);
             Controls.Add(button5);
             Controls.Add(button4);
             Controls.Add(button3);
@@ -132,8 +165,10 @@
             Controls.Add(checkBox1);
             Controls.Add(pictureBox1);
             Name = "Form1";
-            Text = "Form1";
+            Text = "Connect4";
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -148,5 +183,8 @@
         private Button button3;
         private Button button4;
         private Button button5;
+        private FlowLayoutPanel flowLayoutPanel1;
+        private StatusStrip statusStrip1;
+        private ToolStripStatusLabel toolStripStatusLabel1;
     }
 }
