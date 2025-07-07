@@ -66,10 +66,10 @@
             // 
             listBox1.FormattingEnabled = true;
             listBox1.ItemHeight = 15;
-            listBox1.Location = new Point(648, 55);
+            listBox1.Location = new Point(706, 48);
             listBox1.Name = "listBox1";
             listBox1.ScrollAlwaysVisible = true;
-            listBox1.Size = new Size(919, 349);
+            listBox1.Size = new Size(638, 349);
             listBox1.TabIndex = 2;
             // 
             // button1
@@ -131,7 +131,7 @@
             flowLayoutPanel1.Location = new Point(12, 456);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Padding = new Padding(5);
-            flowLayoutPanel1.Size = new Size(1613, 400);
+            flowLayoutPanel1.Size = new Size(1332, 400);
             flowLayoutPanel1.TabIndex = 8;
             // 
             // statusStrip1
@@ -139,7 +139,7 @@
             statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripStatusLabel1 });
             statusStrip1.Location = new Point(0, 859);
             statusStrip1.Name = "statusStrip1";
-            statusStrip1.Size = new Size(1637, 22);
+            statusStrip1.Size = new Size(1364, 22);
             statusStrip1.TabIndex = 9;
             statusStrip1.Text = "statusStrip1";
             // 
@@ -153,7 +153,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1637, 881);
+            ClientSize = new Size(1364, 881);
             Controls.Add(statusStrip1);
             Controls.Add(flowLayoutPanel1);
             Controls.Add(button5);

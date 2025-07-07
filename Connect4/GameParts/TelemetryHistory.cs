@@ -66,7 +66,7 @@ public class TelemetryHistory
             return (trainingData, expectedPolicies);
         }
 
-        List<string> randomKeys = RandomSampleWithoutReplacement(keys, sampleCount);
+        List<string> randomKeys = RandomSample(keys, sampleCount);
 
         double[][] sampledTrainingData = new double[sampleCount][];
         double[][] sampledExpectedPolicies = new double[sampleCount][];
@@ -113,7 +113,7 @@ public class TelemetryHistory
             return (trainingData, expectedValues);
         }
 
-        List<string> randomKeys = RandomSampleWithoutReplacement(keys, sampleCount);
+        List<string> randomKeys = RandomSample(keys, sampleCount);
 
         double[][] sampledTrainingData = new double[sampleCount][];
         double[][] sampledExpectedValues = new double[sampleCount][];
@@ -131,7 +131,7 @@ public class TelemetryHistory
         return (sampledTrainingData, sampledExpectedValues);
     }
 
-    private List<string> RandomSampleWithoutReplacement(string[] population, int sampleSize)
+    private List<string> RandomSample(string[] population, int sampleSize)
     {
         List<string> result = [.. population];
 

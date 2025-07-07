@@ -28,6 +28,8 @@ public class GameBoard
             }
         }
 
+        newBoard.LastPlayed = LastPlayed;   
+
         return newBoard;
     }
 
