@@ -36,9 +36,11 @@
             button3 = new Button();
             button4 = new Button();
             button5 = new Button();
+            button6 = new Button();
             flowLayoutPanel1 = new FlowLayoutPanel();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
+            redPercentChart = new Connect4.GameParts.SimpleChart();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             statusStrip1.SuspendLayout();
             SuspendLayout();
@@ -122,16 +124,35 @@
             button5.UseVisualStyleBackColor = true;
             button5.Click += Arena_Click;
             // 
+            // button6
+            // 
+            button6.Location = new Point(1247, 23);
+            button6.Name = "button6";
+            button6.Size = new Size(95, 23);
+            button6.TabIndex = 11;
+            button6.Text = "Clear Chart";
+            button6.UseVisualStyleBackColor = true;
+            button6.Click += ClearChart_Click;
+            // 
+            // redPercentChart
+            // 
+            redPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            redPercentChart.Location = new Point(12, 410);
+            redPercentChart.Name = "redPercentChart";
+            redPercentChart.Size = new Size(1332, 200);
+            redPercentChart.TabIndex = 10;
+            redPercentChart.Text = "Red Player Win Rate History";
+            // 
             // flowLayoutPanel1
             // 
             flowLayoutPanel1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             flowLayoutPanel1.AutoScroll = true;
             flowLayoutPanel1.BackColor = SystemColors.Control;
             flowLayoutPanel1.BorderStyle = BorderStyle.Fixed3D;
-            flowLayoutPanel1.Location = new Point(12, 456);
+            flowLayoutPanel1.Location = new Point(12, 616);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Padding = new Padding(5);
-            flowLayoutPanel1.Size = new Size(1332, 400);
+            flowLayoutPanel1.Size = new Size(1332, 240);
             flowLayoutPanel1.TabIndex = 8;
             // 
             // statusStrip1
@@ -156,6 +177,8 @@
             ClientSize = new Size(1364, 881);
             Controls.Add(statusStrip1);
             Controls.Add(flowLayoutPanel1);
+            Controls.Add(redPercentChart);
+            Controls.Add(button6);
             Controls.Add(button5);
             Controls.Add(button4);
             Controls.Add(button3);
@@ -183,8 +206,10 @@
         private Button button3;
         private Button button4;
         private Button button5;
+        private Button button6;
         private FlowLayoutPanel flowLayoutPanel1;
         private StatusStrip statusStrip1;
         private ToolStripStatusLabel toolStripStatusLabel1;
+        private Connect4.GameParts.SimpleChart redPercentChart;
     }
 }

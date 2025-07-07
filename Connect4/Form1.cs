@@ -3,6 +3,7 @@ using Connect4.GameParts;
 using DeepNetwork;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Connect4;
 
@@ -16,28 +17,27 @@ public partial class Form1 : Form
     private const string OldValueNetwork = "old_value_network.json";
     private const int SelfPlayGames = 100;
     private readonly Connect4Game _connect4Game = new();
-    private readonly SimpleDumbNetwork _newPolicyNetwork;
-    private readonly SimpleDumbNetwork _newValueNetwork;
-    private readonly System.Timers.Timer _timer = new() { Interval = 100 };
-    private CancellationTokenSource _cancellationTokenSource;
 
     // For parallel games
     private readonly List<GamePanel> _gamePanels = [];
 
+    private readonly SimpleDumbNetwork _newPolicyNetwork;
+    private readonly SimpleDumbNetwork _newValueNetwork;
+    private readonly List<double> _redPercentHistory = new();
+    private readonly System.Timers.Timer _timer = new() { Interval = 100 };
+    private CancellationTokenSource _cancellationTokenSource;
     private int _gamesPlayed = 0;
     private bool _isParallelSelfPlayRunning;
     private SimpleDumbNetwork _oldPolicyNetwork;
     private SimpleDumbNetwork _oldValueNetwork;
     private Mcts _redMcts;
-    private int _TimesLeftWithRandomYellow;
-    private Mcts _yellowMcts;
     private double _redPercent;
+    private Mcts _yellowMcts;
     private double _yellowPercent;
 
     public Form1()
     {
         InitializeComponent();
-
         _timer.Elapsed += _timer_Elapsed;
         _timer.AutoReset = false;
         _timer.Start();
@@ -59,12 +59,27 @@ public partial class Form1 : Form
         _newPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
         _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
 
-        _TimesLeftWithRandomYellow = 3;
+        flowLayoutPanel1.BackColor = Color.Black;
+        flowLayoutPanel1.BorderStyle = BorderStyle.None;
+        flowLayoutPanel1.ForeColor = Color.White;
+                
+        statusStrip1.BackColor = Color.Black;
+        toolStripStatusLabel1.BackColor = Color.Black;
+        toolStripStatusLabel1.ForeColor = Color.White;
+
+        listBox1.BackColor = Color.Black;
+        listBox1.ForeColor = Color.White;
 
         // Update button text for self-play
         button4.Text = "Parallel Play";
+
+        // Initialize the chart
+        InitializeRedPercentChart();
+        BackColor = Color.Black;
+
     }
 
+    
     private static void DisplayStats(int drawCount, int redWinCount, int yellowWinCount, int gameCount, Form form)
     {
         _ = form.Invoke(() => form.Text = $"Games played {gameCount} " +
@@ -219,12 +234,12 @@ public partial class Form1 : Form
                 _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
                 Invoke(() => toolStripStatusLabel1.Text = "Yellow has new network");
-                maximumError = 0.01; 
+                maximumError = 0.03;
             }
             else
             {
                 Invoke(() => toolStripStatusLabel1.Text = "Not replacing Yellow with previous network");
-                maximumError = 0.02; 
+                maximumError = 0.05;
             }
 
             _redMcts.GetTelemetryHistory().SaveToFile();
@@ -237,6 +252,29 @@ public partial class Form1 : Form
             TelemetryHistory telemetryHistory = _redMcts.GetTelemetryHistory();
             telemetryHistory.SaveToFile();
         }
+    }
+
+    private void ClearChart_Click(object sender, EventArgs e)
+    {
+        _redPercentHistory.Clear();
+        Invoke(() =>
+        {
+            redPercentChart.ClearData();
+        });
+        _ = MessageBox.Show("Chart history cleared successfully.");
+    }
+
+    private void InitializeRedPercentChart()
+    {
+        // Set up the chart
+        redPercentChart.Title = "Red Player Win Rate History";
+        redPercentChart.XAxisLabel = "Self-Play Session";
+        redPercentChart.YAxisLabel = "Red Win Rate (%)";
+        redPercentChart.YMin = 0;
+        redPercentChart.YMax = 100;
+
+        // Clear any existing data
+        redPercentChart.ClearData();
     }
 
     private void LoadButton_Click(object sender, EventArgs e)
@@ -328,194 +366,172 @@ public partial class Form1 : Form
 
     private async Task SelfPlayParallelAsync()
     {
-        try
+        _cancellationTokenSource = new CancellationTokenSource();
+        CancellationToken cancellationToken = _cancellationTokenSource.Token;
+
+        int processorCount = Environment.ProcessorCount;
+        int parallelGames = Math.Max(2, processorCount - 1);
+
+        int gamesPerThread = SelfPlayGames / parallelGames;
+        int remainder = SelfPlayGames % parallelGames;
+
+        Invoke(() =>
         {
-            _cancellationTokenSource = new CancellationTokenSource();
-            CancellationToken cancellationToken = _cancellationTokenSource.Token;
+            toolStripStatusLabel1.Text = $"Running {parallelGames} parallel games...";
+            flowLayoutPanel1.Controls.Clear();
+            _gamePanels.Clear();
+        });
 
-            int processorCount = Environment.ProcessorCount;
-            int parallelGames = Math.Max(2, processorCount - 1);
-
-            // Calculate games per thread and the remaining games
-            int baseGamesPerThread = SelfPlayGames / parallelGames;
-            int remainingGames = SelfPlayGames % parallelGames;
-
+        // Create game panels for each thread game
+        for (int i = 0; i < parallelGames; i++)
+        {
+            var gamePanel = new GamePanel(i + 1);
             Invoke(() =>
             {
-                toolStripStatusLabel1.Text = $"Running {parallelGames} parallel games...";
-                flowLayoutPanel1.Controls.Clear();
-                _gamePanels.Clear();
+                flowLayoutPanel1.Controls.Add(gamePanel);
+                _gamePanels.Add(gamePanel);
             });
+        }
 
-            for (int i = 0; i < parallelGames; i++)
+        var sharedTelemetryHistory = new TelemetryHistory();
+        var tasks = new List<Task>();
+        var globalStats = new ConcurrentDictionary<int, (int Red, int Yellow, int Draw, int Total)>();
+
+        for (int gameIndex = 0; gameIndex < parallelGames; gameIndex++)
+        {
+            int index = gameIndex;
+            globalStats[index] = (0, 0, 0, 0);
+
+            // Calculate how many games this thread should play
+            // First 'remainingGames' threads get one extra game
+            int gamesToPlay = gamesPerThread + (index < remainder ? 1 : 0);
+
+            tasks.Add(Task.Run(async () =>
             {
-                var gamePanel = new GamePanel(i + 1);
-                Invoke(() =>
+                try
                 {
-                    flowLayoutPanel1.Controls.Add(gamePanel);
-                    _gamePanels.Add(gamePanel);
-                });
-            }
+                    var redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
+                    var yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
-            var sharedTelemetryHistory = new TelemetryHistory();
-            var tasks = new List<Task>();
-            var globalStats = new ConcurrentDictionary<int, (int Red, int Yellow, int Draw, int Total)>();
+                    int gamesPlayed = 0;
+                    int redWins = 0;
+                    int yellowWins = 0;
+                    int draws = 0;
 
-            for (int gameIndex = 0; gameIndex < parallelGames; gameIndex++)
-            {
-                int index = gameIndex;
-                globalStats[index] = (0, 0, 0, 0);
+                    GamePanel panel = _gamePanels[index];
+                    CompactConnect4Game game = panel.Game;
+                    PictureBox pictureBox = panel.PictureBox;
 
-                // Calculate how many games this thread should play
-                // First 'remainingGames' threads get one extra game
-                int gamesToPlay = baseGamesPerThread + (index < remainingGames ? 1 : 0);
-
-                tasks.Add(Task.Run(async () =>
-                {
-                    try
+                    while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
                     {
-                        var redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
-                        var yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
+                        bool gameEnded = false;
 
-                        int gamesPlayed = 0;
-                        int redWins = 0;
-                        int yellowWins = 0;
-                        int draws = 0;
-
-                        GamePanel panel = _gamePanels[index];
-                        CompactConnect4Game game = panel.Game;
-                        PictureBox pictureBox = panel.PictureBox;
-
-                        while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
+                        while (!gameEnded && !cancellationToken.IsCancellationRequested)
                         {
-                            bool gameEnded = false;
+                            Mcts mcts = game.CurrentPlayer == (int)Player.Red
+                                ? redMcts
+                                : yellowMcts;
 
-                            while (!gameEnded && !cancellationToken.IsCancellationRequested)
+                            int move = await mcts.GetBestMove(game.GameBoard, (int)game.GameBoard.LastPlayed);
+
+                            if (move == -1)
                             {
-                                Mcts mcts = game.CurrentPlayer == (int)Player.Red
-                                    ? redMcts
-                                    : yellowMcts;
+                                mcts.SetWinnerTelemetryHistory(Winner.Draw);
+                                game.ResetGame();
+                                gameEnded = true;
 
-                                int move = await mcts.GetBestMove(game.GameBoard, (int)game.GameBoard.LastPlayed);
-
-                                if (move == -1)
-                                {
-                                    mcts.SetWinnerTelemetryHistory(Winner.Draw);
-                                    game.ResetGame();
-                                    gameEnded = true;
-
-                                    draws++;
-                                    gamesPlayed++;
-
-                                    _ = BeginInvoke(() =>
-                                    {
-                                        panel.RecordResult(Winner.Draw);
-                                        pictureBox.Refresh();
-                                    });
-
-                                    globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
-                                    
-                                    continue;
-                                }
-
-                                int winner = game.PlacePieceColumn(move);
+                                draws++;
+                                gamesPlayed++;
 
                                 _ = BeginInvoke(() =>
                                 {
+                                    panel.RecordResult(Winner.Draw);
                                     pictureBox.Refresh();
                                 });
 
-                                if (winner != 0)
+                                globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
+                                if (gamesPlayed % 5 == 0)
                                 {
-                                    var winnerEnum = (Winner)winner;
-                                    mcts.SetWinnerTelemetryHistory(winnerEnum);
-                                    gameEnded = true;
-
-                                    if (winner == 1)
-                                    {
-                                        redWins++;
-                                    }
-                                    else
-                                    {
-                                        yellowWins++;
-                                    }
-
-                                    gamesPlayed++;
-
-                                    _ = BeginInvoke(() =>
-                                    {
-                                        panel.RecordResult(winnerEnum);
-                                    });
-
-                                    globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                    if (gamesPlayed % 5 == 0) 
-                                    {
-                                        _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
-                                    }
-
-                                    game.ResetGame();
-                                    _ = BeginInvoke(() => pictureBox.Refresh());
-
-                                    continue;
+                                    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
                                 }
+
+                                continue;
+                            }
+
+                            int winner = game.PlacePieceColumn(move);
+
+                            _ = BeginInvoke(() =>
+                            {
+                                pictureBox.Refresh();
+                            });
+
+                            if (winner != 0)
+                            {
+                                var winnerEnum = (Winner)winner;
+                                mcts.SetWinnerTelemetryHistory(winnerEnum);
+                                gameEnded = true;
+
+                                if (winner == 1)
+                                {
+                                    redWins++;
+                                }
+                                else
+                                {
+                                    yellowWins++;
+                                }
+
+                                gamesPlayed++;
+
+                                _ = BeginInvoke(() =>
+                                {
+                                    panel.RecordResult(winnerEnum);
+                                });
+
+                                globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
+                                if (gamesPlayed % 5 == 0)
+                                {
+                                    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+                                }
+
+                                game.ResetGame();
+                                _ = BeginInvoke(() => pictureBox.Refresh());
+
+                                continue;
                             }
                         }
-
-                        lock (sharedTelemetryHistory)
-                        {
-                            MergeTelemetry(redMcts, _redMcts);
-                        }
                     }
-                    catch (Exception ex)
+
+                    lock (sharedTelemetryHistory)
                     {
-                        _ = BeginInvoke(() =>
-                        {
-                            toolStripStatusLabel1.Text = $"Error in game {index}: {ex.Message}";
-                        });
+                        MergeTelemetry(redMcts, _redMcts);
                     }
-                }));
-            }
-
-            try
-            {
-                // Wait for all games to complete
-                await Task.WhenAll(tasks).ConfigureAwait(false);
-
-                // Update final stats
-                _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
-
-                // Save telemetry when all games are done
-                _redMcts.GetTelemetryHistory().SaveToFile();
-
-                _ = BeginInvoke(() =>
+                }
+                catch (Exception ex)
                 {
-                    if (!cancellationToken.IsCancellationRequested)
+                    _ = BeginInvoke(() =>
                     {
-                        toolStripStatusLabel1.Text = "All parallel games completed!";
-                        button4.Text = "Parallel Play";
-                        _isParallelSelfPlayRunning = false;
-                    }
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                // Handling cancellation
-                _ = BeginInvoke(() =>
-                {
-                    toolStripStatusLabel1.Text = "Parallel self-play cancelled";
-                });
-            }
+                        toolStripStatusLabel1.Text = $"Error in game {index}: {ex.Message}";
+                    });
+                }
+            }));
         }
-        catch (Exception ex)
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+        _redMcts.GetTelemetryHistory().SaveToFile();
+        _redPercentHistory.Add(_redPercent);
+        UpdateRedPercentChart();
+
+        _ = BeginInvoke(() =>
         {
-            _ = BeginInvoke(() =>
+            if (!cancellationToken.IsCancellationRequested)
             {
-                toolStripStatusLabel1.Text = $"Error in parallel self-play: {ex.Message}";
+                toolStripStatusLabel1.Text = "All parallel games completed!";
                 button4.Text = "Parallel Play";
                 _isParallelSelfPlayRunning = false;
-            });
-        }
+            }
+        });
     }
 
     private Task TrainAsync(Mcts mcts, double maximumError = MaximumError)
@@ -627,19 +643,19 @@ public partial class Form1 : Form
         _ = Task.Run(() => TrainAsync(_redMcts));
     }
 
-    private void UpdateGlobalStats(ConcurrentDictionary<int, (int Red, int Yellow, int Draw, int Total)> globalStats)
+    private void UpdateGlobalStats(ConcurrentDictionary<int, (int red, int yellow, int draw, int total)> globalStats)
     {
         int totalRed = 0;
         int totalYellow = 0;
         int totalDraw = 0;
         int totalGames = 0;
 
-        foreach ((int Red, int Yellow, int Draw, int Total) in globalStats.Values)
+        foreach ((int red, int yellow, int draw, int total) in globalStats.Values)
         {
-            totalRed += Red;
-            totalYellow += Yellow;
-            totalDraw += Draw;
-            totalGames += Total;
+            totalRed += red;
+            totalYellow += yellow;
+            totalDraw += draw;
+            totalGames += total;
         }
 
         _ = BeginInvoke(() =>
@@ -655,9 +671,26 @@ public partial class Form1 : Form
                     $"Yellow: {_yellowPercent}% " +
                     $"Draw: {drawPercent}%";
 
-                // Also update the status strip to show progress
                 int progressPercent = (int)(totalGames / (double)SelfPlayGames * 100);
                 toolStripStatusLabel1.Text = $"Running: {totalGames}/{SelfPlayGames} games completed ({progressPercent}%)";
+            }
+        });
+    }
+
+    private void UpdateRedPercentChart()
+    {
+        if (_redPercentHistory.Count == 0)
+            return;
+
+        Invoke(() =>
+        {
+            // Clear existing data
+            redPercentChart.ClearData();
+
+            // Add all data points
+            foreach (double value in _redPercentHistory)
+            {
+                redPercentChart.AddDataPoint(value);
             }
         });
     }
