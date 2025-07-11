@@ -31,7 +31,7 @@ public class Mcts(
             Backpropagate(childNode, result);
         }
 
-        UpdateTelemeryHistory(rootNode, _telemetryHistory);
+        UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
         return rootNode.GetBestChild()?.Move ?? -1;
     }
@@ -43,23 +43,20 @@ public class Mcts(
 
         for (int i = 0; i < _maxIterations; i++)
         {
-            //Node? childNode = Select(rootNode, _random);
             Node? childNode = useNetworks
-                ? Select(rootNode, _random, PolicyNetwork)
+                ? Select(rootNode, _random, PolicyNetwork!)
                 : Select(rootNode, _random);
 
             double result = useNetworks
-                ? Simulate(childNode, _random, ValueNetwork)
+                ? Simulate(childNode, _random, ValueNetwork!)
                 : Simulate(childNode, _random);
-
+            
             Backpropagate(childNode, result);
         }
 
-        UpdateTelemeryHistory(rootNode, _telemetryHistory);
+        UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
-        var bestChild = useNetworks
-            ? rootNode.GetBestChild(PolicyNetwork)
-            : rootNode.GetBestChild();
+        var bestChild = rootNode.GetMostValuableChild();
 
         return Task.FromResult(bestChild?.Move ?? -1);
     }
@@ -76,10 +73,14 @@ public class Mcts(
 
     private static void Backpropagate(Node node, double result)
     {
+        // If the result is 0, we set it to a small value to enable switching between players
+        result = result == 0 ? 1e-9 : result;
+
         Node? currentNode = node;
         while (currentNode != null)
         {
             currentNode.Update(result);
+            //flip the result for the next parent node to indicate the other player's perspective
             result *= -1; 
 
             currentNode = currentNode.Parent;
@@ -88,8 +89,16 @@ public class Mcts(
 
     private static double DeepSimulation(Node node, SimpleDumbNetwork valueNetwork)
     {
+        //if last player won no need to calculate value of network
+        if (node.GameBoard.HasWon((int)node.GameBoard.LastPlayed))
+        {
+            node.IsTerminal = true;
+            return 1;
+        }
+
         double[] boardStateArray = [.. node.GameBoard.StateToArray().Select(x => (double)x)];
-        double winProbability = valueNetwork.Calculate(boardStateArray).First();
+        string id = node.GameBoard.StateToString();
+        double winProbability = valueNetwork.CalculateCached(id, boardStateArray).First();
 
         return winProbability;
     }
@@ -128,7 +137,8 @@ public class Mcts(
         int previousPlayer = node.PLayerWhoMadeMove;
         if (node.GameBoard.HasWon(previousPlayer))
         {
-            return previousPlayer;
+            node.IsTerminal = true;
+            return 1;
         }
 
         if (node.IsTerminal)
@@ -162,8 +172,8 @@ public class Mcts(
             return 0;
         }
 
-        // Return the winner
-        return previousPlayer == 1 ? 1 : 2;
+        // Return win value
+        return previousPlayer == 1 ? 1 : 0;
     }
 
     private static Node Select(Node node, Random random)
@@ -213,12 +223,12 @@ public class Mcts(
         return RandomSimulation(node, random);
     }
 
-    private static double Simulate(Node node, Random random, SimpleDumbNetwork? valueNetwork)
+    private static double Simulate(Node node, Random random, SimpleDumbNetwork valueNetwork)
     {
         return DeepSimulation(node, valueNetwork);
     }
 
-    private static void UpdateTelemeryHistory(Node root, TelemetryHistory telemetryHistory)
+    private static void UpdateTelemetryHistory(Node root, TelemetryHistory telemetryHistory)
     {
         // too many results
         //foreach (Node child in root.Children)

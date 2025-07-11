@@ -40,7 +40,7 @@
             flowLayoutPanel1 = new FlowLayoutPanel();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            redPercentChart = new Connect4.GameParts.SimpleChart();
+            winPercentChart = new Connect4.GameParts.SimpleChart();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             statusStrip1.SuspendLayout();
             SuspendLayout();
@@ -136,12 +136,12 @@
             // 
             // redPercentChart
             // 
-            redPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            redPercentChart.Location = new Point(12, 410);
-            redPercentChart.Name = "redPercentChart";
-            redPercentChart.Size = new Size(1332, 200);
-            redPercentChart.TabIndex = 10;
-            redPercentChart.Text = "Red Player Win Rate History";
+            winPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            winPercentChart.Location = new Point(12, 410);
+            winPercentChart.Name = "percentChart";
+            winPercentChart.Size = new Size(1332, 200);
+            winPercentChart.TabIndex = 10;
+            winPercentChart.Text = "Win Rate History";
             // 
             // flowLayoutPanel1
             // 
@@ -177,7 +177,7 @@
             ClientSize = new Size(1364, 881);
             Controls.Add(statusStrip1);
             Controls.Add(flowLayoutPanel1);
-            Controls.Add(redPercentChart);
+            Controls.Add(winPercentChart);
             Controls.Add(button6);
             Controls.Add(button5);
             Controls.Add(button4);
@@ -210,6 +210,6 @@
         private FlowLayoutPanel flowLayoutPanel1;
         private StatusStrip statusStrip1;
         private ToolStripStatusLabel toolStripStatusLabel1;
-        private Connect4.GameParts.SimpleChart redPercentChart;
+        private Connect4.GameParts.SimpleChart winPercentChart;
     }
 }

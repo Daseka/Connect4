@@ -69,6 +69,7 @@ public class NetworkTrainer
         _network.UpdateWeights();
         _network.Trained = true;
         _network.LastError = _network.Error;
+        _network.ClearCache();
 
         return _network.Error;
     }

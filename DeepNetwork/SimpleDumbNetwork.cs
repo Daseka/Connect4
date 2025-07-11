@@ -1,18 +1,20 @@
 ﻿using MathNet.Numerics.LinearAlgebra;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Collections.Concurrent;
+using System.Linq.Expressions;
 
 namespace DeepNetwork;
 
 [Serializable]
 public class SimpleDumbNetwork
 {
-    public bool Trained;
     public IActivationFunction[] ActivationFunctions;
     public double[][] DeltaValues;
     public double[][][] Gradients;
     public double[][][] PreviousGradients;
     public double[][][] PreviousWeightChange;
+    public bool Trained;
     public double[][][] UpdateValues;
     public double[][] Values;
     public double[][][] Weights;
@@ -21,7 +23,10 @@ public class SimpleDumbNetwork
     private const double NearNullValue = 1e-11d;
     private const double VariableLearnRateBig = 1.2d;
     private const double VariableLearnRateSmall = 0.5d;
+    private const int CacheSize = 50000;
     private static readonly Random _random = new();
+    private ConcurrentDictionary<string, double[]> _cachedValues = new();
+    private ConcurrentQueue<string> _cacheKeys = new();
 
     public double Error { get; set; }
     public double LastError { get; set; }
@@ -134,6 +139,29 @@ public class SimpleDumbNetwork
         return network;
     }
 
+    public double[] CalculateCached(string id, double[] input)
+    {
+        if (_cachedValues.TryGetValue(id, out double[]? cachedResult))
+        {
+            return cachedResult;
+        }
+
+        double[] result = Calculate(input);
+        _cachedValues[id] = result;
+
+        _cacheKeys.Enqueue(id);
+        if (_cachedValues.Count > CacheSize)
+        {
+            // Remove the oldest entry
+            if (_cacheKeys.TryDequeue(out string? oldestKey))
+            {
+                _cachedValues.TryRemove(oldestKey, out _);
+            }
+        }
+
+        return result;
+    }
+
     public double[] Calculate(double[] input)
     {
         for (int node = 0; node < Values[0].Length; node++)
@@ -173,15 +201,10 @@ public class SimpleDumbNetwork
         //return [.. Values[^1]];
     }
 
-    private static double Sum(double[] values, IReadOnlyList<double> weights)
+    public void ClearCache()
     {
-        double result = 0;
-        for (int i = 0; i < values.Length; i++)
-        {
-            result += values[i] * weights[i];
-        }
-
-        return result;
+        _cachedValues.Clear();
+        _cacheKeys.Clear();
     }
 
     public SimpleDumbNetwork Clone()
@@ -357,6 +380,17 @@ public class SimpleDumbNetwork
     private static int Sign(double value)
     {
         return Math.Abs(value) < NearNullValue ? 0 : value > 0 ? 1 : -1;
+    }
+
+    private static double Sum(double[] values, IReadOnlyList<double> weights)
+    {
+        double result = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            result += values[i] * weights[i];
+        }
+
+        return result;
     }
 
     private double UpdateWeight(

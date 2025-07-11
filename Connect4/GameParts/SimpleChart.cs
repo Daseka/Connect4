@@ -8,10 +8,13 @@ namespace Connect4.GameParts
 {
     public class SimpleChart : Control
     {
-        private const int DeepLearnThreshold = 55;
-        private readonly List<double> _dataPoints = new();
-        private readonly Pen _linePen = new(Color.Silver, 2);
-        private readonly Pen _gridPen = new(Color.FromArgb(30, 30, 30), 1);
+        private readonly List<double> _redPoints = new();
+        private readonly List<double> _yellowPoints = new();
+        private readonly List<double> _drawPoints = new();
+        private readonly Pen _redPen = new(Color.Silver, 2);
+        private readonly Pen _yellowPen = new(Color.FromArgb(101, 53, 1), 2);
+        private readonly Pen _drawPen = new(Color.FromArgb(23, 82, 85), 2);
+        private readonly Pen _gridPen = new(Color.Black);//FromArgb(30, 30, 30), 1);
         private readonly Brush _backgroundBrush = new SolidBrush(Color.Black);
         private readonly Brush _textBrush = new SolidBrush(Color.White);
         private readonly Font _titleFont = new("Arial", 12, FontStyle.Bold);
@@ -22,6 +25,7 @@ namespace Connect4.GameParts
         public string YAxisLabel { get; set; } = "Y";
         public double YMin { get; set; } = 0;
         public double YMax { get; set; } = 100;
+        public double DeepLearnThreshold { get; set; } = 55;
 
         public SimpleChart()
         {
@@ -29,15 +33,19 @@ namespace Connect4.GameParts
             BackColor = Color.Black;
         }
 
-        public void AddDataPoint(double value)
+        public void AddDataPoint(double redValue, double yellowValue, double drawValue )
         {
-            _dataPoints.Add(value);
+            _redPoints.Add(redValue);
+            _yellowPoints.Add(yellowValue);
+            _drawPoints.Add(drawValue);
             Invalidate();
         }
 
         public void ClearData()
         {
-            _dataPoints.Clear();
+            _redPoints.Clear();
+            _yellowPoints.Clear();
+            _drawPoints.Clear();
             Invalidate();
         }
 
@@ -53,7 +61,7 @@ namespace Connect4.GameParts
             
             // Calculate margins
             int leftMargin = 60;
-            int rightMargin = 20;
+            int rightMargin = 40;
             int topMargin = 50;
             int bottomMargin = 50;
             
@@ -90,34 +98,35 @@ namespace Connect4.GameParts
             for (int i = 0; i <= gridLines; i++)
             {
                 double value = YMin + (YMax - YMin) * i / gridLines;
-                int y;
+                int redY;
                 if (YMax == YMin)
                 {
                     // If YMax == YMin, distribute grid lines evenly
-                    y = chartArea.Bottom - (int)((double)i / gridLines * chartArea.Height);
+                    redY = chartArea.Bottom - (int)((double)i / gridLines * chartArea.Height);
                 }
                 else
                 {
-                    y = chartArea.Bottom - (int)((value - YMin) / (YMax - YMin) * chartArea.Height);
+                    redY = chartArea.Bottom - (int)((value - YMin) / (YMax - YMin) * chartArea.Height);
                 }
                 
-                g.DrawLine(_gridPen, chartArea.Left, y, chartArea.Right, y);
+                g.DrawLine(_gridPen, chartArea.Left, redY, chartArea.Right, redY);
                 
                 string label = value.ToString("F0");
                 SizeF labelSize = g.MeasureString(label, _axisFont);
-                g.DrawString(label, _axisFont, _textBrush, 
-                    chartArea.Left - labelSize.Width - 5, y - labelSize.Height / 2);
+                g.DrawString(label, _axisFont, _textBrush, chartArea.Left - labelSize.Width - 5, redY - labelSize.Height / 2);
+                g.DrawString(label, _axisFont, _textBrush, chartArea.Left + chartArea.Width + 30 - labelSize.Width, redY - labelSize.Height / 2);
             }
-            
+
             // Draw data points and lines
-            if (_dataPoints.Count > 0)
+            if (_redPoints.Count > 0)
             {
-                Point[] points = new Point[_dataPoints.Count];
-                
-                for (int i = 0; i < _dataPoints.Count; i++)
+                Point[] redPoints = new Point[_redPoints.Count];
+                Point[] yellowPoints = new Point[_yellowPoints.Count];
+                Point[] drawPoints = new Point[_drawPoints.Count];
+                for (int i = 0; i < _redPoints.Count; i++)
                 {
                     double x;
-                    if (_dataPoints.Count == 1)
+                    if (_redPoints.Count == 1)
                     {
                         // Single data point - center it
                         x = chartArea.Left + chartArea.Width / 2.0;
@@ -125,60 +134,64 @@ namespace Connect4.GameParts
                     else
                     {
                         // Multiple data points - distribute evenly
-                        x = chartArea.Left + (double)i / (_dataPoints.Count - 1) * chartArea.Width;
+                        x = chartArea.Left + (double)i / (_redPoints.Count - 1) * chartArea.Width;
                     }
                     
-                    double y;
+                    double redY;
+                    double yellowY;
+                    double drawY;
                     if (YMax == YMin)
                     {
                         // If YMax == YMin, center the point vertically
-                        y = chartArea.Top + chartArea.Height / 2.0;
+                        redY = chartArea.Top + chartArea.Height / 2.0;
+                        yellowY = chartArea.Top + chartArea.Height / 2.0;
+                        drawY = chartArea.Top + chartArea.Height / 2.0;
                     }
                     else
                     {
-                        y = chartArea.Bottom - (_dataPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
+                        redY = chartArea.Bottom - (_redPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
+                        yellowY = chartArea.Bottom - (_yellowPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
+                        drawY = chartArea.Bottom - (_drawPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
                     }
                     
-                    points[i] = new Point((int)x, (int)y);
+                    redPoints[i] = new Point((int)x, (int)redY);
+                    yellowPoints[i] = new Point((int)x, (int)yellowY);
+                    drawPoints[i] = new Point((int)x, (int)drawY);
                 }
                 
                 // Draw lines between points (only if we have more than 1 point)
-                if (points.Length > 1)
+                if (redPoints.Length > 1)
                 {
-                    g.DrawLines(_linePen, points);
+                    g.DrawLines(_redPen, redPoints);
+                    g.DrawLines(_yellowPen, yellowPoints);
+                    g.DrawLines(_drawPen, drawPoints);
                 }
                 
                 // Draw data points
-                for (int i = 0; i < points.Length; i++)
+                for (int i = 0; i < redPoints.Length; i++)
                 {
                     // Choose color based on value - green if > 60, red otherwise
-                    Color pointColor = _dataPoints[i] > DeepLearnThreshold
+                    Color pointColor = _redPoints[i] > DeepLearnThreshold
                         ? Color.FromArgb(0, 255, 0) 
                         : Color.FromArgb(255, 0, 0);
-                    g.FillEllipse(new SolidBrush(pointColor), points[i].X - 3, points[i].Y - 3, 6, 6);
+                    g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);
                 }
             }
             
             // Draw X-axis labels
-            if (_dataPoints.Count > 0)
+            if (_redPoints.Count > 0)
             {
-                int maxLabels = Math.Min(10, _dataPoints.Count);
+                int maxLabels = Math.Min(10, _redPoints.Count);
                 for (int i = 0; i < maxLabels; i++)
                 {
-                    int dataIndex;
-                    if (maxLabels == 1)
-                    {
-                        dataIndex = 0;
-                    }
-                    else
-                    {
-                        dataIndex = i * (_dataPoints.Count - 1) / (maxLabels - 1);
-                    }
-                    
-                    if (dataIndex >= 0 && dataIndex < _dataPoints.Count)
+                    int dataIndex = maxLabels == 1 
+                        ? 0 
+                        : i * (_redPoints.Count - 1) / (maxLabels - 1);
+
+                    if (dataIndex >= 0 && dataIndex < _redPoints.Count)
                     {
                         double x;
-                        if (_dataPoints.Count == 1)
+                        if (_redPoints.Count == 1)
                         {
                             // Single data point - center it
                             x = chartArea.Left + chartArea.Width / 2.0;
@@ -186,13 +199,12 @@ namespace Connect4.GameParts
                         else
                         {
                             // Multiple data points - distribute evenly
-                            x = chartArea.Left + (double)dataIndex / (_dataPoints.Count - 1) * chartArea.Width;
+                            x = chartArea.Left + (double)dataIndex / (_redPoints.Count - 1) * chartArea.Width;
                         }
                         
                         string label = (dataIndex + 1).ToString();
                         SizeF labelSize = g.MeasureString(label, _axisFont);
-                        g.DrawString(label, _axisFont, _textBrush, 
-                            (float)x - labelSize.Width / 2, chartArea.Bottom + 5);
+                        g.DrawString(label, _axisFont, _textBrush, (float)x - labelSize.Width / 2, chartArea.Bottom + 5);
                     }
                 }
             }
@@ -202,7 +214,8 @@ namespace Connect4.GameParts
         {
             if (disposing)
             {
-                _linePen?.Dispose();
+                _redPen?.Dispose();
+                _yellowPen?.Dispose();
                 _gridPen?.Dispose();
                 _backgroundBrush?.Dispose();
                 _textBrush?.Dispose();

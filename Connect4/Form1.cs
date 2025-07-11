@@ -3,6 +3,7 @@ using Connect4.GameParts;
 using DeepNetwork;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Management;
 using System.Runtime.InteropServices;
 
 namespace Connect4;
@@ -10,20 +11,24 @@ namespace Connect4;
 public partial class Form1 : Form
 {
     private const int ArenaIterations = 100;
-    private const double MaximumError = 0.01;
+    private const double MaximumError = 0.02;
     private const int MaxTrainingRuns = 5000;
     private const int McstIterations = 800;
     private const string OldPolicyNetwork = "old_policy_network.json";
     private const string OldValueNetwork = "old_value_network.json";
-    private const int SelfPlayGames = 100;
+    private const int SelfPlayGames = 1000;
+    private const int TrainingDataCount = 1050;
+    private const int DeepLearningThreshold = 54;
     private readonly Connect4Game _connect4Game = new();
 
     // For parallel games
     private readonly List<GamePanel> _gamePanels = [];
 
-    private readonly SimpleDumbNetwork _newPolicyNetwork;
-    private readonly SimpleDumbNetwork _newValueNetwork;
+    private SimpleDumbNetwork _newPolicyNetwork;
+    private SimpleDumbNetwork _newValueNetwork;
     private readonly List<double> _redPercentHistory = new();
+    private readonly List<double> _yellowPercentHistory = new();
+    private readonly List<double> _drawPercentHistory = new();
     private readonly System.Timers.Timer _timer = new() { Interval = 100 };
     private CancellationTokenSource _cancellationTokenSource;
     private int _gamesPlayed = 0;
@@ -34,6 +39,7 @@ public partial class Form1 : Form
     private double _redPercent;
     private Mcts _yellowMcts;
     private double _yellowPercent;
+    private double _drawPercent;
 
     public Form1()
     {
@@ -46,18 +52,34 @@ public partial class Form1 : Form
         pictureBox1.Paint += PictureBox1_Paint;
         pictureBox1.Click += PictureBox1_Click;
 
-        _oldValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
-        _oldPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
-        _newValueNetwork = new SimpleDumbNetwork([127, 95, 38, 1]);
-        _newPolicyNetwork = new SimpleDumbNetwork([127, 124, 32, 7]);
+        //_oldValueNetwork = new SimpleDumbNetwork([127, 67, 34, 1]);
+        //_oldPolicyNetwork = new SimpleDumbNetwork([127, 67, 34, 7]);
+        //_newValueNetwork = new SimpleDumbNetwork([127, 67, 34, 1]);
+        //_newPolicyNetwork = new SimpleDumbNetwork([127, 67, 34, 7]);
+
+        //_oldValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
+        //_oldPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
+        //_newValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
+        //_newPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
+
+        _oldValueNetwork = new SimpleDumbNetwork([127, 237, 97, 1]);
+        _oldPolicyNetwork = new SimpleDumbNetwork([127, 237, 97, 7]);
+        _newValueNetwork = new SimpleDumbNetwork([127, 237, 97, 1]);
+        _newPolicyNetwork = new SimpleDumbNetwork([127, 237, 97, 7]);
 
         _oldValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
         _oldPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
+        _oldPolicyNetwork.Trained = true;
+        _oldValueNetwork.Trained = true;
         _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
+        
 
         _newValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
         _newPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
+        _newPolicyNetwork.Trained = true;
+        _newValueNetwork.Trained = true;
         _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
+        
 
         flowLayoutPanel1.BackColor = Color.Black;
         flowLayoutPanel1.BorderStyle = BorderStyle.None;
@@ -77,9 +99,19 @@ public partial class Form1 : Form
         InitializeRedPercentChart();
         BackColor = Color.Black;
 
+        _redMcts.GetTelemetryHistory().LoadFromFile();
+        
+        winPercentChart.DeepLearnThreshold = DeepLearningThreshold;
+
+
+        this.Resize += Form1_Resize;
     }
 
-    
+    private void Form1_Resize(object sender, EventArgs e)
+    {
+        winPercentChart.Invalidate();
+    }
+
     private static void DisplayStats(int drawCount, int redWinCount, int yellowWinCount, int gameCount, Form form)
     {
         _ = form.Invoke(() => form.Text = $"Games played {gameCount} " +
@@ -222,44 +254,66 @@ public partial class Form1 : Form
 
     private async Task BattleArena()
     {
+        int bossLives = 3;
+        bool skipTraining = false;
         for (int i = 0; i < ArenaIterations; i++)
         {
             await SelfPlayParallelAsync();
 
             double maximumError;
-            if (_redPercent > 55)
+            if (_redPercent > DeepLearningThreshold)
             {
-                _oldValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
-                _oldPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
-                _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
-                Invoke(() => toolStripStatusLabel1.Text = "Yellow has new network");
-                maximumError = 0.03;
+                if (bossLives <= 1)
+                {
+                    bossLives = 3;
+
+                    //Only save the networks if Red has a win rate above deep learning threshold
+                    _redMcts.ValueNetwork?.SaveToFile(OldValueNetwork);
+                    _redMcts.PolicyNetwork?.SaveToFile(OldPolicyNetwork);
+
+                    // Load the higher win rate networks for Yellow
+                    _oldValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
+                    _oldPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
+                    _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
+
+                    Invoke(() => toolStripStatusLabel1.Text = "Boss Dead: Yellow has new network");
+                    maximumError = 0.05;
+                }
+                else
+                {
+                    skipTraining = true;
+                    bossLives--;
+                    Invoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: Reduced boss life skipping training");
+                    maximumError = 0.05;
+                }
+
             }
             else
             {
-                Invoke(() => toolStripStatusLabel1.Text = "Not replacing Yellow with previous network");
+                Invoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
                 maximumError = 0.05;
             }
 
             _redMcts.GetTelemetryHistory().SaveToFile();
 
-            await TrainAsync(_redMcts, maximumError);
+            if (!skipTraining)
+            {
+                await TrainAsync(_redMcts, maximumError);
+            }
 
-            _redMcts.ValueNetwork?.SaveToFile(OldValueNetwork);
-            _redMcts.PolicyNetwork?.SaveToFile(OldPolicyNetwork);
-
-            TelemetryHistory telemetryHistory = _redMcts.GetTelemetryHistory();
-            telemetryHistory.SaveToFile();
+            skipTraining = false;
         }
     }
 
     private void ClearChart_Click(object sender, EventArgs e)
     {
         _redPercentHistory.Clear();
+        _yellowPercentHistory.Clear();
+        _drawPercentHistory.Clear();
         Invoke(() =>
         {
-            redPercentChart.ClearData();
+            winPercentChart.ClearData();
         });
         _ = MessageBox.Show("Chart history cleared successfully.");
     }
@@ -267,30 +321,29 @@ public partial class Form1 : Form
     private void InitializeRedPercentChart()
     {
         // Set up the chart
-        redPercentChart.Title = "Red Player Win Rate History";
-        redPercentChart.XAxisLabel = "Self-Play Session";
-        redPercentChart.YAxisLabel = "Red Win Rate (%)";
-        redPercentChart.YMin = 0;
-        redPercentChart.YMax = 100;
+        winPercentChart.Title = "Win Rate History";
+        winPercentChart.XAxisLabel = "Self-Play Session";
+        winPercentChart.YAxisLabel = "Win Rate (%)";
+        winPercentChart.YMin = 0;
+        winPercentChart.YMax = 100;
 
         // Clear any existing data
-        redPercentChart.ClearData();
+        winPercentChart.ClearData();
     }
 
     private void LoadButton_Click(object sender, EventArgs e)
     {
         _redMcts.GetTelemetryHistory().LoadFromFile();
 
-        _oldValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldPolicyNetwork;
-        _oldPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
-        _redMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
+        _newValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
+        _newPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
+        _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
 
         _ = MessageBox.Show("telemetry and network loaded successfully.");
     }
 
-    private void MergeTelemetry(Mcts source, Mcts target)
+    private static void MergeTelemetry(Mcts source, Mcts target)
     {
-        // Use the new MergeFrom method to merge telemetry from source to target
         if (source != null && target != null)
         {
             TelemetryHistory sourceTelemetry = source.GetTelemetryHistory();
@@ -347,7 +400,6 @@ public partial class Form1 : Form
     {
         if (_isParallelSelfPlayRunning)
         {
-            // Cancel self-play
             _cancellationTokenSource?.Cancel();
             button4.Text = "Parallel Play";
             _isParallelSelfPlayRunning = false;
@@ -355,13 +407,25 @@ public partial class Form1 : Form
         }
         else
         {
-            // Start  self-play
             button4.Text = "Stop";
             _isParallelSelfPlayRunning = true;
             toolStripStatusLabel1.Text = "Starting parallel self-play...";
 
             _ = Task.Run(SelfPlayParallelAsync);
         }
+    }
+
+    private static int GetPhysicalCoreCount()
+    {
+        int coreCount = 0;
+        using (var searcher = new ManagementObjectSearcher("select NumberOfCores from Win32_Processor"))
+        {
+            foreach (var item in searcher.Get())
+            {
+                coreCount += int.Parse(item["NumberOfCores"].ToString());
+            }
+        }
+        return coreCount;
     }
 
     private async Task SelfPlayParallelAsync()
@@ -371,13 +435,13 @@ public partial class Form1 : Form
 
         int processorCount = Environment.ProcessorCount;
         int parallelGames = Math.Max(2, processorCount - 1);
+        parallelGames = 16;
 
         int gamesPerThread = SelfPlayGames / parallelGames;
         int remainder = SelfPlayGames % parallelGames;
 
         Invoke(() =>
         {
-            toolStripStatusLabel1.Text = $"Running {parallelGames} parallel games...";
             flowLayoutPanel1.Controls.Clear();
             _gamePanels.Clear();
         });
@@ -450,20 +514,17 @@ public partial class Form1 : Form
                                 });
 
                                 globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                if (gamesPlayed % 5 == 0)
-                                {
-                                    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
-                                }
+                                //if (gamesPlayed % 10 == 0)
+                                //{
+                                //    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+                                //}
+                                _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
 
                                 continue;
                             }
 
                             int winner = game.PlacePieceColumn(move);
-
-                            _ = BeginInvoke(() =>
-                            {
-                                pictureBox.Refresh();
-                            });
+                            _ = BeginInvoke(() => pictureBox.Refresh());
 
                             if (winner != 0)
                             {
@@ -482,16 +543,15 @@ public partial class Form1 : Form
 
                                 gamesPlayed++;
 
-                                _ = BeginInvoke(() =>
-                                {
-                                    panel.RecordResult(winnerEnum);
-                                });
+                                _ = BeginInvoke(() => panel.RecordResult(winnerEnum));
 
                                 globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                if (gamesPlayed % 5 == 0)
-                                {
-                                    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
-                                }
+                                //if (gamesPlayed % 10 == 0)
+                                //{
+                                //    _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+                                //}
+
+                                _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
 
                                 game.ResetGame();
                                 _ = BeginInvoke(() => pictureBox.Refresh());
@@ -519,9 +579,11 @@ public partial class Form1 : Form
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
         _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
-        _redMcts.GetTelemetryHistory().SaveToFile();
         _redPercentHistory.Add(_redPercent);
-        UpdateRedPercentChart();
+        _yellowPercentHistory.Add(_yellowPercent);
+        _drawPercentHistory.Add(_drawPercent);
+
+        UpdatePercentChart();
 
         _ = BeginInvoke(() =>
         {
@@ -540,99 +602,107 @@ public partial class Form1 : Form
 
         mcts.GetTelemetryHistory().LoadFromFile();
 
-        //-----------------------
-        //Train the value network
-        (double[][] valueTrainingData, double[][] valueExpectedData) = mcts
-            .GetTelemetryHistory()
-            .GetTrainingValueData(2000);
+        
+        TelemetryHistory telemetryHistory = mcts.GetTelemetryHistory();
+        int timesToTrain = Math.Min(5,telemetryHistory.Count / TrainingDataCount);
 
-        int run = 0;
-        int sameCount = 0;
-        double previousError = 0;
-        double error;
-
-        var valueTrainer = new NetworkTrainer(mcts.ValueNetwork);
-        var stopwatch = Stopwatch.StartNew();
-        do
+        for (int t = 0; t < timesToTrain; t++)
         {
-            error = valueTrainer.Train(valueTrainingData, valueExpectedData);
+            //-----------------------
+            //Train the value network
+            (double[][] valueTrainingData, double[][] valueExpectedData) = telemetryHistory
+                .GetTrainingValueData(TrainingDataCount);
 
-            sameCount = previousError.Equals(error) ? sameCount + 1 : 0;
-            previousError = error;
-            run++;
-            Invoke(() =>
+            int run = 0;
+            int sameCount = 0;
+            double previousError = 0;
+            double error;
+
+            var valueTrainer = new NetworkTrainer(mcts.ValueNetwork);
+            var stopwatch = Stopwatch.StartNew();
+            do
             {
-                _ = listBox1.Items.Add($"Error {Math.Round(error, 5):F5}");
-                listBox1.TopIndex = listBox1.Items.Count - 1;
-            });
-        }
-        while (run < MaxTrainingRuns && error > maximumError && sameCount < 50);
-        stopwatch.Stop();
+                error = valueTrainer.Train(valueTrainingData, valueExpectedData);
 
-        string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
-        _ = Invoke(() => listBox1.Items.Add(x));
+                sameCount = previousError.Equals(error) ? sameCount + 1 : 0;
+                previousError = error;
+                run++;
+                Invoke(() =>
+                {
+                    _ = listBox1.Items.Add($"Error {Math.Round(error, 5):F5} Runs {MaxTrainingRuns - run}");
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
+            }
+            while (run < MaxTrainingRuns && error > maximumError && sameCount < 50);
+            stopwatch.Stop();
 
-        //Test the network 10 times
-        for (int i = 0; i < 10; i++)
-        {
-            int index = i;
-            double[] input = valueTrainingData[index];
-            double[] output = mcts.ValueNetwork.Calculate(input);
+            string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
+            _ = Invoke(() => listBox1.Items.Add(x));
 
-            //calculate the error
-            double expected = valueExpectedData[index][0];
-            double diffrence = Math.Abs(expected - output[0]);
-            Invoke(() =>
+            //Test the network 10 times
+            for (int i = 0; i < 10; i++)
             {
-                _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
-                listBox1.TopIndex = listBox1.Items.Count - 1;
-            });
-        }
+                int index = i;
+                double[] input = valueTrainingData[index];
+                double[] output = mcts.ValueNetwork.Calculate(input);
 
-        //-----------------------
-        //Train the policy network
-        (double[][] policyTrainingData, double[][] policyExpectedData) = mcts.GetTelemetryHistory().GetTrainingPolicyData();
-        int run2 = 0;
-        double sameCount2 = 0;
-        double previousError2 = 0;
-        double error2 = 0.0;
+                //calculate the error
+                double expected = valueExpectedData[index][0];
+                double diffrence = Math.Abs(expected - output[0]);
+                Invoke(() =>
+                {
+                    _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
+            }
 
-        var policyTrainer = new NetworkTrainer(mcts.PolicyNetwork);
-        var stopwatch2 = Stopwatch.StartNew();
-        do
-        {
-            error2 = policyTrainer.Train(policyTrainingData, policyExpectedData);
+            //-----------------------
+            //Train the policy network
+            (double[][] policyTrainingData, double[][] policyExpectedData) = telemetryHistory
+                .GetTrainingPolicyData(TrainingDataCount);
 
-            sameCount2 = previousError2.Equals(error2) ? sameCount2 + 1 : 0;
-            previousError2 = error2;
-            run2++;
-            Invoke(() =>
+            int run2 = 0;
+            double sameCount2 = 0;
+            double previousError2 = 0;
+            double error2 = 0.0;
+
+            var policyTrainer = new NetworkTrainer(mcts.PolicyNetwork);
+            var stopwatch2 = Stopwatch.StartNew();
+            do
             {
-                _ = listBox1.Items.Add($"Error {Math.Round(error2, 5):F5}");
-                listBox1.TopIndex = listBox1.Items.Count - 1;
-            });
-        }
-        while (run2 < MaxTrainingRuns && error2 > maximumError && sameCount2 < 50);
-        stopwatch2.Stop();
+                error2 = policyTrainer.Train(policyTrainingData, policyExpectedData);
 
-        string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2}";
-        _ = Invoke(() => listBox1.Items.Add(text));
+                sameCount2 = previousError2.Equals(error2) ? sameCount2 + 1 : 0;
+                previousError2 = error2;
+                run2++;
+                Invoke(() =>
+                {
+                    _ = listBox1.Items.Add($"Error {Math.Round(error2, 5):F5} Runs {MaxTrainingRuns - run2}");
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
+            }
+            while (run2 < MaxTrainingRuns && error2 > maximumError && sameCount2 < 50);
+            stopwatch2.Stop();
 
-        //Test the network 10 times
-        for (int i = 0; i < 10; i++)
-        {
-            int index = i;
-            double[] input = policyTrainingData[index];
-            double[] output = mcts.PolicyNetwork.Calculate(input);
+            string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2}";
+            _ = Invoke(() => listBox1.Items.Add(text));
 
-            //calculate the error
-            double expected = policyExpectedData[index][0];
-            double diffrence = Math.Abs(expected - output[0]);
-            Invoke(() =>
+            //Test the network 10 times
+            for (int i = 0; i < 10; i++)
             {
-                _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
-                listBox1.TopIndex = listBox1.Items.Count - 1;
-            });
+                int index = i;
+                double[] input = policyTrainingData[index];
+                double[] output = mcts.PolicyNetwork.Calculate(input);
+
+                //calculate the error
+                double expected = policyExpectedData[index][0];
+                double diffrence = Math.Abs(expected - output[0]);
+                Invoke(() =>
+                {
+                    _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
+            }
         }
 
         return Task.CompletedTask;
@@ -640,7 +710,11 @@ public partial class Form1 : Form
 
     private void TrainButton_Click(object sender, EventArgs e)
     {
-        _ = Task.Run(() => TrainAsync(_redMcts));
+        //_ = Task.Run(() => TrainAsync(_redMcts, 0.05));
+        //_ = Task.Run(() => TrainAsync(_yellowMcts, 0.05));
+
+        TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
+        TrainAsync(_yellowMcts, 0.05).GetAwaiter().GetResult();
     }
 
     private void UpdateGlobalStats(ConcurrentDictionary<int, (int red, int yellow, int draw, int total)> globalStats)
@@ -664,12 +738,12 @@ public partial class Form1 : Form
             {
                 _redPercent = Math.Round(totalRed / (double)totalGames * 100, 2);
                 _yellowPercent = Math.Round(totalYellow / (double)totalGames * 100, 2);
-                double drawPercent = Math.Round(totalDraw / (double)totalGames * 100, 2);
+                _drawPercent = Math.Round(totalDraw / (double)totalGames * 100, 2);
 
                 Text = $"Progress: {totalGames}/{SelfPlayGames} - " +
                     $"Red: {_redPercent}% " +
                     $"Yellow: {_yellowPercent}% " +
-                    $"Draw: {drawPercent}%";
+                    $"Draw: {_drawPercent}%";
 
                 int progressPercent = (int)(totalGames / (double)SelfPlayGames * 100);
                 toolStripStatusLabel1.Text = $"Running: {totalGames}/{SelfPlayGames} games completed ({progressPercent}%)";
@@ -677,20 +751,20 @@ public partial class Form1 : Form
         });
     }
 
-    private void UpdateRedPercentChart()
+    private void UpdatePercentChart()
     {
         if (_redPercentHistory.Count == 0)
+        {
             return;
+        }
 
         Invoke(() =>
         {
-            // Clear existing data
-            redPercentChart.ClearData();
+            winPercentChart.ClearData();
 
-            // Add all data points
-            foreach (double value in _redPercentHistory)
+            for (int i = 0; i < _redPercentHistory.Count; i++)
             {
-                redPercentChart.AddDataPoint(value);
+                winPercentChart.AddDataPoint(_redPercentHistory[i], _yellowPercentHistory[i], _drawPercentHistory[i]);
             }
         });
     }

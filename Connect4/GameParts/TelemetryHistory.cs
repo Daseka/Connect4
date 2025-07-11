@@ -5,7 +5,7 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
-    private const int MaxBufferSize = 500000;
+    private const int MaxBufferSize = 100000;
     private const string TelemetryHistoryFileName = "telemetry_history.json";
     private readonly Queue<string> _insertionOrder = new();
     private List<int[]> _boardState = [];
@@ -13,11 +13,12 @@ public class TelemetryHistory
     private readonly Random _random = new();
 
     public Dictionary<string, BoardStateHistoricInfo> BoardStateHistoricalInfos { get; set; } = [];
-
     public int Count { get; private set; }
 
     public void LoadFromFile()
     {
+        ClearAll();
+
         if (!File.Exists(TelemetryHistoryFileName))
         {
             _boardState = [];
@@ -237,25 +238,21 @@ public class TelemetryHistory
         _policies.Clear();
     }
     
-    /// <summary>
-    /// Merges telemetry from another TelemetryHistory instance into this one
-    /// </summary>
-    /// <param name="other">The source telemetry to merge from</param>
     public void MergeFrom(TelemetryHistory other)
     {
-        if (other == null) return;
-        
-        // Merge board state historical infos
+        if (other == null)
+        {
+            return;
+        }
+
         foreach (var entry in other.BoardStateHistoricalInfos)
         {
             if (BoardStateHistoricalInfos.TryGetValue(entry.Key, out BoardStateHistoricInfo? existingInfo))
             {
-                // Merge stats from the existing entry
                 existingInfo.RedWins += entry.Value.RedWins;
                 existingInfo.YellowWins += entry.Value.YellowWins;
                 existingInfo.Draws += entry.Value.Draws;
                 
-                // Merge policies if available (using simple averaging)
                 if (entry.Value.Policy != null && entry.Value.Policy.Length > 0)
                 {
                     if (existingInfo.Policy == null || existingInfo.Policy.Length == 0)
@@ -273,7 +270,6 @@ public class TelemetryHistory
             }
             else
             {
-                // Create a copy of the board state historic info
                 var newInfo = new BoardStateHistoricInfo(entry.Key)
                 {
                     RedWins = entry.Value.RedWins,
@@ -282,36 +278,30 @@ public class TelemetryHistory
                     Policy = entry.Value.Policy != null ? [.. entry.Value.Policy] : []
                 };
                 
-                // Add to our collection and insertion order
                 BoardStateHistoricalInfos[entry.Key] = newInfo;
                 _insertionOrder.Enqueue(entry.Key);
                 Count++;
                 
-                // Enforce buffer limit if needed
                 EnforceBufferLimit();
             }
         }
         
-        // Merge any temp data from other
         foreach (var state in other._boardState)
         {
-            _boardState.Add([.. state]);  // Create a copy of the state
+            _boardState.Add([.. state]);
         }
         
-        // Merge policies
         foreach (var policy in other._policies)
         {
             if (_policies.TryGetValue(policy.Key, out List<double[]>? existingPolicy))
             {
-                // Add all policies from the other instance
                 foreach (var p in policy.Value)
                 {
-                    existingPolicy.Add([.. p]);  // Copy the policy array
+                    existingPolicy.Add([.. p]);
                 }
             }
             else
             {
-                // Create a new list with copies of the policies
                 var newPolicyList = new List<double[]>();
                 foreach (var p in policy.Value)
                 {

@@ -59,27 +59,61 @@ public class Node
         return bestChild;
     }
 
+    public Node? GetMostValuableChild()
+    {
+        double currentMaxValue = double.MinValue;
+        double currentMaxVisits = double.MinValue;
+        Node? bestChild = null;
+
+        foreach (Node node in Children)
+        {
+            double value = node.Visits == 0 ? 0 : node.Wins / node.Visits;
+            if (value >= currentMaxValue || (value == currentMaxValue && node.Visits > currentMaxVisits))
+            {
+                currentMaxVisits = node.Visits;
+                currentMaxValue = value;
+                bestChild = node;
+            }
+        }
+
+        return bestChild;
+    }
+
     public Node? GetBestChild(SimpleDumbNetwork policyNetwork)
     {
         double currentMaxUcb = double.MinValue;
         Node? bestChild = null;
+        Node? winningChild = null;
 
         double[] boardStateArray = [.. GameBoard.StateToArray().Select(x => (double)x)];
-        double[] policyProbability = policyNetwork.Calculate(boardStateArray);
+        string id = GameBoard.StateToString();
+        double[] policyProbability = policyNetwork.CalculateCached(id,boardStateArray);
 
         foreach (Node node in Children)
         {
+            double parentVisit = node.Parent?.Visits == 0 ? 1 : node.Parent?.Visits ?? 1;
             node.Ucb = node.Wins / (node.Visits == 0? 1 : node.Visits)
-                + ExplorationConstant * policyProbability[node.Move] * Math.Sqrt((node.Parent?.Visits ?? 1) / (1 + node.Visits));
+                + ExplorationConstant * policyProbability[node.Move] * Math.Sqrt(parentVisit / (1 + node.Visits));
 
             if (node.Ucb > currentMaxUcb)
             {
                 currentMaxUcb = node.Ucb;
                 bestChild = node;
             }
+            
+            if (node.GameBoard.HasWon((int)node.PLayerWhoMadeMove))
+            {
+                winningChild = node;
+            }
         }
 
-        return bestChild;
+        //prioratize winning child over best child
+        return winningChild ?? bestChild;
+    }
+
+    public override string ToString()
+    {
+        return $"Move: {Move} Wins: {Math.Round(Wins, 2)} V:{Visits} Ucb: {Math.Round(Ucb, 2)} Val: {Math.Round(Wins / Visits, 2)}";
     }
 
     public bool IsLeaf()
@@ -90,9 +124,9 @@ public class Node
     public void Update(double result)
     {
         ++Visits;
-        if (result == PLayerWhoMadeMove)
-        {
-            Wins += result > 0 ? result : 1 + result;
-        }
+        
+        Wins += result > 0 
+            ? Math.Round(result,4) 
+            : Math.Round(1 + result,4);
     }
 }
