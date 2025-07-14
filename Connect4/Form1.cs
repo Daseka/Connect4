@@ -13,10 +13,10 @@ public partial class Form1 : Form
     private const int ArenaIterations = 100;
     private const double MaximumError = 0.02;
     private const int MaxTrainingRuns = 5000;
-    private const int McstIterations = 800;
+    private const int McstIterations = 1600;
     private const string OldPolicyNetwork = "old_policy_network.json";
     private const string OldValueNetwork = "old_value_network.json";
-    private const int SelfPlayGames = 1000;
+    private const int SelfPlayGames = 100;
     private const int TrainingDataCount = 1050;
     private const int DeepLearningThreshold = 54;
     private readonly Connect4Game _connect4Game = new();
@@ -62,10 +62,10 @@ public partial class Form1 : Form
         //_newValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
         //_newPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
 
-        _oldValueNetwork = new SimpleDumbNetwork([127, 237, 97, 1]);
-        _oldPolicyNetwork = new SimpleDumbNetwork([127, 237, 97, 7]);
-        _newValueNetwork = new SimpleDumbNetwork([127, 237, 97, 1]);
-        _newPolicyNetwork = new SimpleDumbNetwork([127, 237, 97, 7]);
+        _oldValueNetwork = new SimpleDumbNetwork([127, 196, 98, 49, 1]);
+        _oldPolicyNetwork = new SimpleDumbNetwork([127, 196, 98, 49, 7]);
+        _newValueNetwork = new SimpleDumbNetwork([127, 196, 98, 49, 1]);
+        _newPolicyNetwork = new SimpleDumbNetwork([127, 196, 98, 49, 7]);
 
         _oldValueNetwork = SimpleDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
         _oldPolicyNetwork = SimpleDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
@@ -112,14 +112,6 @@ public partial class Form1 : Form
         winPercentChart.Invalidate();
     }
 
-    private static void DisplayStats(int drawCount, int redWinCount, int yellowWinCount, int gameCount, Form form)
-    {
-        _ = form.Invoke(() => form.Text = $"Games played {gameCount} " +
-        $"Red: {Math.Round(redWinCount / (double)gameCount * 100, 2)}% " +
-        $"Yellow: {Math.Round(yellowWinCount / (double)gameCount * 100, 2)}% " +
-        $"Draw: {Math.Round(drawCount / (double)gameCount * 100, 2)}");
-    }
-
     private static void EndGame(
             Connect4Game connect4Game,
         Mcts mcts,
@@ -161,68 +153,6 @@ public partial class Form1 : Form
         return winner;
     }
 
-    private static async Task SelfPlayAsync(
-        Mcts RedMcts,
-        Mcts YellowMcts,
-        Connect4Game game,
-        ListBox listBox,
-        PictureBox pictureBox,
-        Form form)
-    {
-        int count = 0;
-        int drawCount = 0;
-        int redWinCount = 0;
-        int yellowWinCount = 0;
-
-        TelemetryHistory telemetryHistory = RedMcts.GetTelemetryHistory();
-        bool ended = false;
-
-        while (telemetryHistory.Count < SelfPlayGames || !ended)
-        {
-            ended = false;
-            Mcts mcts = game.CurrentPlayer == (int)Player.Red
-                ? RedMcts
-                : YellowMcts;
-
-            int move = await mcts.GetBestMove(game.GameBoard, (int)game.GameBoard.LastPlayed);
-            if (move == -1)
-            {
-                EndGame(game, mcts, listBox, pictureBox);
-                ended = true;
-
-                drawCount++;
-                count++;
-
-                DisplayStats(drawCount, redWinCount, yellowWinCount, count, form);
-
-                continue;
-            }
-
-            int winner = PlacePiece(game, move, listBox, pictureBox);
-            if (winner != 0)
-            {
-                EndGame(game, mcts, listBox, pictureBox);
-                ended |= true;
-
-                if (winner == 1)
-                {
-                    redWinCount++;
-                }
-                else if (winner == 2)
-                {
-                    yellowWinCount++;
-                }
-
-                count++;
-                DisplayStats(drawCount, redWinCount, yellowWinCount, count, form);
-
-                continue;
-            }
-        }
-
-        DisplayStats(drawCount, redWinCount, yellowWinCount, count, form);
-    }
-
     private async void _timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
     {
         if (checkBox1.Checked)
@@ -260,7 +190,6 @@ public partial class Form1 : Form
         {
             await SelfPlayParallelAsync();
 
-            double maximumError;
             if (_redPercent > DeepLearningThreshold)
             {
 
@@ -278,25 +207,27 @@ public partial class Form1 : Form
                     _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
                     Invoke(() => toolStripStatusLabel1.Text = "Boss Dead: Yellow has new network");
-                    maximumError = 0.05;
                 }
                 else
                 {
                     skipTraining = true;
                     bossLives--;
                     Invoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: Reduced boss life skipping training");
-                    maximumError = 0.05;
                 }
 
+            }
+            else if(_redPercent < 30)
+            {
+                Invoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
             }
             else
             {
                 Invoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
-                maximumError = 0.05;
             }
 
             _redMcts.GetTelemetryHistory().SaveToFile();
-
+            
+            double maximumError = 0.50;
             if (!skipTraining)
             {
                 await TrainAsync(_redMcts, maximumError);
@@ -413,19 +344,6 @@ public partial class Form1 : Form
 
             _ = Task.Run(SelfPlayParallelAsync);
         }
-    }
-
-    private static int GetPhysicalCoreCount()
-    {
-        int coreCount = 0;
-        using (var searcher = new ManagementObjectSearcher("select NumberOfCores from Win32_Processor"))
-        {
-            foreach (var item in searcher.Get())
-            {
-                coreCount += int.Parse(item["NumberOfCores"].ToString());
-            }
-        }
-        return coreCount;
     }
 
     private async Task SelfPlayParallelAsync()
