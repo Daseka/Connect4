@@ -1,6 +1,7 @@
 
 using Connect4.Ais;
 using Connect4.GameParts;
+using DeepNetwork;
 
 namespace Tests
 {
@@ -16,5 +17,12 @@ namespace Tests
 
             Assert.Pass();
         }
-    }   
+
+        [Test]
+        public void Test2()
+        {
+            FlatDumbNetwork netowork = new FlatDumbNetwork([4, 2, 1]);
+            var bla = netowork.Calculate([1, 0, 0, 1]);
+        }
+    }
 }

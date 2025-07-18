@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 
 namespace DeepNetwork;
 
+
 [Serializable]
 public class SimpleDumbNetwork
 {
@@ -180,25 +181,6 @@ public class SimpleDumbNetwork
         }
 
         return Values[^1];
-
-        //for (int node = 0; node < Values[0].Length; node++)
-        //{
-        //    Values[0][node] = input[node];
-        //}
-
-        //for (int layer = 1; layer < Values.Length; layer++)
-        //{
-        //    var inputVector = Vector<double>.Build.DenseOfArray(Values[layer - 1]);
-        //    var weightMatrix = Matrix<double>.Build.DenseOfRowArrays(Weights[layer - 1]);
-        //    var sums = weightMatrix * inputVector;
-
-        //    for (int node = 0; node < Values[layer].Length; node++)
-        //    {
-        //        Values[layer][node] = ActivationFunctions[layer].Calculate(sums[node]);
-        //    }
-        //}
-
-        //return [.. Values[^1]];
     }
 
     public void ClearCache()
@@ -245,34 +227,6 @@ public class SimpleDumbNetwork
         {
             //Set values using training data
             _ = Calculate(trainingInputs[i]);
-
-            ////Calculate Gradients
-            //var output = Vector<double>.Build.DenseOfArray(Values[^1]);
-            //var target = Vector<double>.Build.DenseOfArray(trainingOutputs[i]);
-            //var deltaV = (target - output).PointwiseMultiply(output.Map(ActivationFunctions[^1].Derivative));
-            //DeltaValues[^1] = [.. deltaV];
-
-            //double[][] dvals = new double[DeltaValues.Length][];
-            //for (int layer = Values.Length - 2; layer >= 1; layer--)
-            //{
-            //    var weights = Matrix<double>.Build.DenseOfRowArrays(Weights[layer]);
-            //    var nextDelta = Vector<double>.Build.DenseOfArray(DeltaValues[layer + 1]);
-            //    var value = Vector<double>.Build.DenseOfArray(Values[layer]);
-            //    // Multiply weights^T * nextDelta
-            //    var sum = weights.TransposeThisAndMultiply(nextDelta);
-            //    var deltavalues = sum.PointwiseMultiply(value.Map(ActivationFunctions[layer].Derivative));
-            //    DeltaValues[layer] = [.. deltavalues];
-            //}
-
-            //for (int layer = 0; layer < Weights.Length; layer++)
-            //{
-            //    var delta = Vector<double>.Build.DenseOfArray(DeltaValues[layer + 1]);
-            //    var prevValues = Vector<double>.Build.DenseOfArray(Values[layer]);
-            //    var grad = delta.OuterProduct(prevValues); // Matrix: [node][prevNode]
-            //    for (int node = 0; node < Gradients[layer].Length; node++)
-            //        for (int prevNode = 0; prevNode < Gradients[layer][node].Length; prevNode++)
-            //            Gradients[layer][node][prevNode] += grad[node, prevNode];
-            //}
 
             // Calculate Gradients
             for (int node = 0; node < DeltaValues[^1].Length; node++)
