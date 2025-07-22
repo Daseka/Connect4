@@ -7,11 +7,9 @@ namespace Connect4;
 public partial class Form1 : Form
 {
     private readonly Connect4Game _connect4Game = new();
-
-    // For parallel games
+    private readonly Connect4Game _editorConnect4Game = new();
     private readonly List<GamePanel> _gamePanels = [];
 
-    private readonly System.Timers.Timer _timer = new() { Interval = 100 };
     private CancellationTokenSource _cancellationTokenSource = new();
     private int _gamesPlayed = 0;
     private bool _isParallelSelfPlayRunning;
@@ -25,23 +23,14 @@ public partial class Form1 : Form
     public Form1()
     {
         InitializeComponent();
-        _timer.Elapsed += _timer_Elapsed;
-        _timer.AutoReset = false;
-        _timer.Start();
 
         pictureBox1.Size = new Size(650, 320);
         pictureBox1.Paint += PictureBox1_Paint;
         pictureBox1.Click += PictureBox1_Click;
 
-        //_oldValueNetwork = new SimpleDumbNetwork([127, 67, 34, 1]);
-        //_oldPolicyNetwork = new SimpleDumbNetwork([127, 67, 34, 7]);
-        //_newValueNetwork = new SimpleDumbNetwork([127, 67, 34, 1]);
-        //_newPolicyNetwork = new SimpleDumbNetwork([127, 67, 34, 7]);
-
-        //_oldValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
-        //_oldPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
-        //_newValueNetwork = new SimpleDumbNetwork([127, 137, 67, 1]);
-        //_newPolicyNetwork = new SimpleDumbNetwork([127, 137, 67, 7]);
+        // Set up the second picture box for board editor
+        pictureBox2.Size = new Size(650, 320);
+        pictureBox2.Paint += PictureBox2_Paint;
 
         _oldValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 1]);
         _oldPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
@@ -71,17 +60,27 @@ public partial class Form1 : Form
         listBox1.BackColor = Color.Black;
         listBox1.ForeColor = Color.White;
 
-        // Update button text for self-play
+        label1.ForeColor = Color.White;
+
         button4.Text = "Parallel Play";
 
-        // Initialize the chart
+        // In your Form1.cs constructor, after initializing tab pages:
+        foreach (TabPage tabPage in tabControl1.TabPages)
+        {
+            tabPage.Paint += (s, e) =>
+            {
+                e.Graphics.Clear(Color.Black);
+            };
+        }
+
         InitializeRedPercentChart();
         BackColor = Color.Black;
 
-        _redMcts.GetTelemetryHistory().LoadFromFile();
+        _telemetryHistory.LoadFromFile();
         winPercentChart.DeepLearnThreshold = DeepLearningThreshold;
 
         this.Resize += Form1_Resize;
+
     }
 
     private static void EndGame(
@@ -125,33 +124,23 @@ public partial class Form1 : Form
         return winner;
     }
 
-    private async void _timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
-    {
-        if (checkBox1.Checked)
-        {
-            int compMove = await _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1);
-
-            if (compMove == -1)
-            {
-                EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
-                _ = Invoke(() => Text = $"Connect4 Games played {++_gamesPlayed}");
-            }
-
-            int winner = PlacePiece(_connect4Game, compMove, listBox1, pictureBox1);
-
-            if (winner != 0)
-            {
-                EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
-                _ = Invoke(() => Text = $"Connect4 Games played {++_gamesPlayed}");
-            }
-        }
-
-        _timer.Start();
-    }
+    private bool _isBattleArenaRunning = false;
+    private CancellationTokenSource _arenaCancelationToken;
 
     private void Arena_Click(object sender, EventArgs e)
     {
-        _ = Task.Run(BattleArena);
+        if (_isBattleArenaRunning)
+        {
+            _arenaCancelationToken.Cancel();
+            _isBattleArenaRunning = false;
+        }
+        else
+        {
+            _arenaCancelationToken = new CancellationTokenSource();
+            _isBattleArenaRunning = true;
+            _ = Task.Run(BattleArena);
+        }
+
     }
 
     private void ClearChart_Click(object sender, EventArgs e)
@@ -186,7 +175,7 @@ public partial class Form1 : Form
 
     private void LoadButton_Click(object sender, EventArgs e)
     {
-        _redMcts.GetTelemetryHistory().LoadFromFile();
+        _telemetryHistory.LoadFromFile();
 
         _newValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
         _newPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
@@ -205,10 +194,10 @@ public partial class Form1 : Form
             string color = winner == 1 ? "Red" : "Yellow";
             _ = MessageBox.Show($"{color} Player wins!");
 
-            EndGame(_connect4Game, _yellowMcts, listBox1, pictureBox1);
+            EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
         }
 
-        int compMove = _yellowMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1)
+        int compMove = _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1)
             .GetAwaiter()
             .GetResult();
 
@@ -219,7 +208,7 @@ public partial class Form1 : Form
             string color = winner == 1 ? "Red" : "Yellow";
             _ = MessageBox.Show($"{color} Player wins!");
 
-            EndGame(_connect4Game, _yellowMcts, listBox1, pictureBox1);
+            EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
         }
     }
 
@@ -230,7 +219,7 @@ public partial class Form1 : Form
 
     private void SaveButton_Click(object sender, EventArgs e)
     {
-        _redMcts.GetTelemetryHistory().SaveToFile();
+        _telemetryHistory.SaveToFile();
 
         _ = MessageBox.Show("Telemetry history saved successfully.");
     }
@@ -261,5 +250,17 @@ public partial class Form1 : Form
 
         TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
         TrainAsync(_yellowMcts, 0.05).GetAwaiter().GetResult();
+    }
+
+    private void PictureBox2_Paint(object? sender, PaintEventArgs e)
+    {
+        _editorConnect4Game.DrawBoard(e.Graphics);
+    }
+
+    private void ReadBoardStateButton_Click(object sender, EventArgs e)
+    {
+        _editorConnect4Game.SetState(textBox1.Text);
+        pictureBox2.Refresh();
+
     }
 }

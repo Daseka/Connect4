@@ -10,7 +10,6 @@ public class Mcts(
     Random? random = null)
 {
     private const int MaxColumnCount = 7;
-    private const int MaxIterationsRandom = 100;
     private readonly int _maxIterations = maxIterations;
     private readonly Random _random = random ?? new();
     private TelemetryHistory _telemetryHistory = new();

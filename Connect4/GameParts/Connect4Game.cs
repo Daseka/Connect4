@@ -21,7 +21,7 @@ public class Connect4Game
 
         if (GameBoard.PlacePieceClick(clickEvent, pictureBox, CurrentPlayer))
         {
-            if (GameBoard.HasWon(CurrentPlayer))
+            if (HasWinner())
             {
                 return CurrentPlayer;
             }
@@ -45,6 +45,11 @@ public class Connect4Game
         }
 
         return 0;
+    }
+
+    public void SetState(string state)
+    {
+        GameBoard.StringToState(state);
     }
 
     public void ResetGame()
