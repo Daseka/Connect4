@@ -5,36 +5,18 @@ namespace Connect4.Ais;
 
 public class Mcts(
     int maxIterations,
-    SimpleDumbNetwork? valueNetwork = null,
-    SimpleDumbNetwork? policyNetwork = null,
+    FlatDumbNetwork? valueNetwork = null,
+    FlatDumbNetwork? policyNetwork = null,
     Random? random = null)
 {
     private const int MaxColumnCount = 7;
-    private const int MaxIterationsRandom = 100;
     private readonly int _maxIterations = maxIterations;
     private readonly Random _random = random ?? new();
     private TelemetryHistory _telemetryHistory = new();
+    private const double MinimumPolicyValue = 0.01;
 
-    public SimpleDumbNetwork? PolicyNetwork { get; private set; } = policyNetwork;
-    public SimpleDumbNetwork? ValueNetwork { get; private set; } = valueNetwork;
-
-    public int GetBestMoveRandom(GameBoard gameBoard, int previousPlayer)
-    {
-        var rootNode = new Node(gameBoard.Copy(), previousPlayer);
-
-        for (int i = 0; i < MaxIterationsRandom; i++)
-        {
-            Node? childNode = Select(rootNode, _random);
-
-            double result = Simulate(childNode, _random);
-
-            Backpropagate(childNode, result);
-        }
-
-        UpdateTelemetryHistory(rootNode, _telemetryHistory);
-
-        return rootNode.GetBestChild()?.Move ?? -1;
-    }
+    public FlatDumbNetwork? PolicyNetwork { get; private set; } = policyNetwork;
+    public FlatDumbNetwork? ValueNetwork { get; private set; } = valueNetwork;
 
     public Task<int> GetBestMove(GameBoard gameBoard, int previousPlayer)
     {
@@ -87,7 +69,7 @@ public class Mcts(
         }
     }
 
-    private static double DeepSimulation(Node node, SimpleDumbNetwork valueNetwork)
+    private static double DeepSimulation(Node node, FlatDumbNetwork valueNetwork)
     {
         //if last player won no need to calculate value of network
         if (node.GameBoard.HasWon((int)node.GameBoard.LastPlayed))
@@ -197,7 +179,7 @@ public class Mcts(
         return bestChild ?? node;
     }
 
-    private static Node Select(Node node, Random random, SimpleDumbNetwork policyNetwork)
+    private static Node Select(Node node, Random random, FlatDumbNetwork policyNetwork)
     {
         if (node.IsTerminal)
         {
@@ -223,7 +205,7 @@ public class Mcts(
         return RandomSimulation(node, random);
     }
 
-    private static double Simulate(Node node, Random random, SimpleDumbNetwork valueNetwork)
+    private static double Simulate(Node node, Random random, FlatDumbNetwork valueNetwork)
     {
         return DeepSimulation(node, valueNetwork);
     }
@@ -240,7 +222,7 @@ public class Mcts(
         double[] policy = new double[MaxColumnCount];
         foreach (Node child in root.Children)
         {
-            policy[child.Move] = child.Visits / root.Visits;
+            policy[child.Move] = Math.Max(child.Visits / root.Visits, MinimumPolicyValue);
         }
 
         telemetryHistory.StoreTempData(root.GameBoard, policy);

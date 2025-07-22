@@ -101,6 +101,40 @@ public class GameBoard
         return new string(data);
     }
 
+    public void StringToState(string statestring)
+    {
+        var temp = BitKey.ToArray(statestring);
+        statestring = string.Join("", temp.Select(x => x.ToString()));
+
+        if (string.IsNullOrEmpty(statestring) || statestring.Length != Board.Length * CellStates + LastToPlay)
+        {
+            throw new ArgumentException("Invalid state string length.", nameof(statestring));
+        }
+
+        // Reset board
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                Board[i, j] = 0;
+            }
+        }
+
+        int boardSize = Board.Length;
+
+        for (int idx = 0; idx < boardSize; idx++)
+        {
+            if (statestring[idx] == '1')
+                Board[idx / Columns, idx % Columns] = (int)Player.Red;
+            else if (statestring[idx + boardSize] == '1')
+                Board[idx / Columns, idx % Columns] = (int)Player.Yellow;
+            else if (statestring[idx + boardSize * 2] == '1')
+                Board[idx / Columns, idx % Columns] = (int)Player.None;
+        }
+
+        LastPlayed = statestring[^1] == '1' ? Player.Red : Player.Yellow;
+    }
+
     public int[] StateToArray()
     {
         var data = new int[Board.Length * CellStates + LastToPlay];

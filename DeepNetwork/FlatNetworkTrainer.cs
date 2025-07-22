@@ -1,12 +1,8 @@
 ﻿namespace DeepNetwork;
-public class NetworkTrainer
-{
-    private readonly SimpleDumbNetwork _network;
 
-    public NetworkTrainer(SimpleDumbNetwork network)
-    {
-        _network = network;
-    }
+public class FlatNetworkTrainer(FlatDumbNetwork network)
+{
+    private readonly FlatDumbNetwork _network = network;
 
     public double Train(double[][] trainingInputs, double[][] trainingOutputs)
     {
@@ -17,7 +13,7 @@ public class NetworkTrainer
 
         int chunkSize = total / threads;
         int remainder = total % threads;
-        double[][][][] gradientsPerThread = new double[threads][][][];
+        double[][] gradientsPerThread = new double[threads][];
         double[] errors = new double[threads];
         int[] counts = new int[threads];
 
@@ -34,26 +30,20 @@ public class NetworkTrainer
             Array.Copy(trainingInputs, start, inputsPart, 0, count);
             Array.Copy(trainingOutputs, start, outputsPart, 0, count);
 
-            SimpleDumbNetwork clone = _network.Clone();
+            FlatDumbNetwork clone = _network.Clone();
             (gradientsPerThread[t], errors[t]) = clone.ComputeGradientsAndError(inputsPart, outputsPart);
         });
 
         // add all the gradients together and devide them by all the threads
         for (int i = 0; i < _network.Gradients.Length; i++)
         {
-            for (int j = 0; j < _network.Gradients[i].Length; j++)
+            double sum = 0;
+            for (int t = 0; t < threads; t++)
             {
-                for (int k = 0; k < _network.Gradients[i][j].Length; k++)
-                {
-                    double sum = 0;
-                    for (int t = 0; t < threads; t++)
-                    {
-                        sum += gradientsPerThread[t][i][j][k];
-                    }
-
-                    _network.Gradients[i][j][k] = sum / threads;
-                }
+                sum += gradientsPerThread[t][i];
             }
+
+            _network.Gradients[i] = sum / threads;
         }
 
         // Average error

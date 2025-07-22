@@ -5,8 +5,8 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
-    private const int MaxBufferSize = 500000;
-    private const string TelemetryHistoryFileName = "telemetry_history.json";
+    private const int MaxBufferSize = 1000000;
+    private const string TelemetryHistoryFileName = "telemetry\\telemetry_history.json";
     private readonly Queue<string> _insertionOrder = new();
     private List<int[]> _boardState = [];
     private readonly Dictionary<string, List<double[]>> _policies = [];

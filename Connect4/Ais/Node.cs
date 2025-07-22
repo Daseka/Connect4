@@ -11,9 +11,11 @@ public class Node
     public bool IsTerminal { get; set; }
     public int Move { get; set; }
     public Node? Parent { get; }
-    // This is the player who made the move that led to this node
-    public int PLayerWhoMadeMove { get; set; } = 0; 
     public int PlayerToPlay { get; set; }
+
+    // This is the player who made the move that led to this node
+    public int PLayerWhoMadeMove { get; set; } = 0;
+
     public double Ucb { get; set; }
     public double Visits { get; private set; }
     public double Wins { get; private set; }
@@ -59,6 +61,45 @@ public class Node
         return bestChild;
     }
 
+    public Node? GetBestChild(FlatDumbNetwork policyNetwork)
+    {
+        double currentMaxUcb = double.MinValue;
+        Node? bestChild = null;
+        Node? winningChild = null;
+
+        double[] boardStateArray = [.. GameBoard.StateToArray().Select(x => (double)x)];
+        string id = GameBoard.StateToString();
+        double[] policyProbability = policyNetwork.CalculateCached(id, boardStateArray);
+
+        if (Math.Round(policyProbability.Sum()) < 1 )
+        {
+            //randomly return a child node if the policy network does not know
+            Random random = new();
+            return Children[random.Next(Children.Count)];
+        }
+
+        foreach (Node node in Children)
+        {
+            double parentVisit = node.Parent?.Visits == 0 ? 1 : node.Parent?.Visits ?? 1;
+            node.Ucb = node.Wins / (node.Visits == 0 ? 1 : node.Visits)
+                + ExplorationConstant * policyProbability[node.Move] * Math.Sqrt(parentVisit / (1 + node.Visits));
+
+            if (node.Ucb > currentMaxUcb)
+            {
+                currentMaxUcb = node.Ucb;
+                bestChild = node;
+            }
+
+            if (node.GameBoard.HasWon((int)node.PLayerWhoMadeMove))
+            {
+                winningChild = node;
+            }
+        }
+
+        //prioratize winning child over best child
+        return winningChild ?? bestChild;
+    }
+
     public Node? GetMostValuableChild()
     {
         double currentMaxValue = double.MinValue;
@@ -79,36 +120,9 @@ public class Node
         return bestChild;
     }
 
-    public Node? GetBestChild(SimpleDumbNetwork policyNetwork)
+    public bool IsLeaf()
     {
-        double currentMaxUcb = double.MinValue;
-        Node? bestChild = null;
-        Node? winningChild = null;
-
-        double[] boardStateArray = [.. GameBoard.StateToArray().Select(x => (double)x)];
-        string id = GameBoard.StateToString();
-        double[] policyProbability = policyNetwork.CalculateCached(id,boardStateArray);
-
-        foreach (Node node in Children)
-        {
-            double parentVisit = node.Parent?.Visits == 0 ? 1 : node.Parent?.Visits ?? 1;
-            node.Ucb = node.Wins / (node.Visits == 0? 1 : node.Visits)
-                + ExplorationConstant * policyProbability[node.Move] * Math.Sqrt(parentVisit / (1 + node.Visits));
-
-            if (node.Ucb > currentMaxUcb)
-            {
-                currentMaxUcb = node.Ucb;
-                bestChild = node;
-            }
-            
-            if (node.GameBoard.HasWon((int)node.PLayerWhoMadeMove))
-            {
-                winningChild = node;
-            }
-        }
-
-        //prioratize winning child over best child
-        return winningChild ?? bestChild;
+        return Children.Count == 0;
     }
 
     public override string ToString()
@@ -116,17 +130,12 @@ public class Node
         return $"Move: {Move} Wins: {Math.Round(Wins, 2)} V:{Visits} Ucb: {Math.Round(Ucb, 2)} Val: {Math.Round(Wins / Visits, 2)}";
     }
 
-    public bool IsLeaf()
-    {
-        return Children.Count == 0;
-    }
-
     public void Update(double result)
     {
         ++Visits;
-        
-        Wins += result > 0 
-            ? Math.Round(result,4) 
-            : Math.Round(1 + result,4);
+
+        Wins += result > 0
+            ? Math.Round(result, 4)
+            : Math.Round(1 + result, 4);
     }
 }
