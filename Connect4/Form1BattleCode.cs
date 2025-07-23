@@ -16,7 +16,7 @@ public partial class Form1 : Form
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
     private const int SelfPlayGames = 100;
-    private const int TelemetryHistorySaturation = 100000;
+    private const int TelemetryHistorySaturation = 1;
     private const int TrainingDataCount = 510;
 
     private readonly List<double> _drawPercentHistory = [];
@@ -78,7 +78,7 @@ public partial class Form1 : Form
                 BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
             }
 
-            if(_arenaCancelationToken.IsCancellationRequested)
+            if (_arenaCancelationToken.IsCancellationRequested)
             {
                 BeginInvoke(() => toolStripStatusLabel1.Text = "Battle Arena cancelled.");
                 return;
@@ -289,12 +289,12 @@ public partial class Form1 : Form
             {
                 error = valueTrainer.Train(valueTrainingData, valueExpectedData);
 
-                sameCount = previousError.Equals(Math.Round(error,6)) ? sameCount + 1 : 0;
-                previousError = Math.Round(error, 6);
+                sameCount = previousError.Equals(Math.Round(error, 8)) ? sameCount + 1 : 0;
+                previousError = Math.Round(error, 8);
                 run++;
                 BeginInvoke(() =>
                 {
-                    _ = listBox1.Items.Add($"Error {Math.Round(error, 5):F5} Runs {MaxTrainingRuns - run}");
+                    _ = listBox1.Items.Add($"Error {Math.Round(error, 8):F8} Runs {MaxTrainingRuns - run}");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
@@ -342,14 +342,14 @@ public partial class Form1 : Form
                 run2++;
                 BeginInvoke(() =>
                 {
-                    _ = listBox1.Items.Add($"Error {Math.Round(error2, 5):F5} Runs {MaxTrainingRuns - run2}");
+                    _ = listBox1.Items.Add($"Error {Math.Round(error2, 8):F8} Runs {MaxTrainingRuns - run2}");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
             while (run2 < MaxTrainingRuns && error2 > maximumError && sameCount2 < 50);
             stopwatch2.Stop();
 
-            string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2}";
+            string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2} same {sameCount2}";
             _ = BeginInvoke(() => listBox1.Items.Add(text));
 
             //Test the network 10 times
@@ -408,9 +408,9 @@ public partial class Form1 : Form
                 _redWithDrawPercent = Math.Round(_redPercent + _drawPercent / 2, 2);
 
                 Text = $"{totalGames}/{SelfPlayGames} - " +
-                    $"R: {_redPercent}% ({_redWithDrawPercent}%)" +
-                    $"Y: {_yellowPercent}% " +
-                    $"D: {_drawPercent}%" +
+                    $"R: {_redPercent:F2}% ({_redWithDrawPercent:F2}%)" +
+                    $"Y: {_yellowPercent:F2}% " +
+                    $"D: {_drawPercent:F2}%" +
                     $"Data: {_telemetryHistory.Count}";
 
                 int progressPercent = (int)(totalGames / (double)SelfPlayGames * 100);
