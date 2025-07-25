@@ -267,6 +267,7 @@
             Controls.Add(flowLayoutPanel1);
             Controls.Add(winPercentChart);
             Name = "Form1";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Connect4";
             tabControl1.ResumeLayout(false);
             tabPage1.ResumeLayout(false);

@@ -5,7 +5,7 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
-    private const int MaxBufferSize = 1000000;
+    private const int MaxBufferSize = 2000000;
     private const string TelemetryHistoryFileName = "telemetry\\telemetry_history.json";
     private readonly Queue<string> _insertionOrder = new();
     private List<int[]> _boardState = [];
@@ -104,10 +104,12 @@ public class TelemetryHistory
             foreach (BoardStateHistoricInfo info in BoardStateHistoricalInfos.Values)
             {
                 trainingData[index] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
-                double totalGames = info.RedWins + info.YellowWins + info.Draws;
-                expectedValues[index] = trainingData[index][^1] == (double)Player.Red
-                    ? [info.RedWins / totalGames,]
-                    : [info.YellowWins / totalGames,];
+                double totalGames = info.RedWins + info.YellowWins + info.YellowWins + info.Draws;
+                expectedValues[index] = [
+                    Math.Round(info.RedWins / totalGames, 5),
+                    Math.Round(info.YellowWins / totalGames, 5),
+                    Math.Round(info.Draws / totalGames, 5)
+                ];
                 index++;
             }
 
@@ -124,9 +126,11 @@ public class TelemetryHistory
             BoardStateHistoricInfo info = BoardStateHistoricalInfos[randomKeys[i]];
             sampledTrainingData[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
             double totalGames = info.RedWins + info.YellowWins + info.Draws;
-            sampledExpectedValues[i] = sampledTrainingData[i][^1] == (double)Player.Red
-                ? [info.RedWins / totalGames,]
-                : [info.YellowWins / totalGames,];
+            sampledExpectedValues[i] = [
+                Math.Round(info.RedWins / totalGames, 5),
+                Math.Round(info.YellowWins / totalGames, 5),
+                Math.Round(info.Draws / totalGames, 5)
+            ];
         }
 
         return (sampledTrainingData, sampledExpectedValues);

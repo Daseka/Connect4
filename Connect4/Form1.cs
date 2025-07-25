@@ -32,9 +32,9 @@ public partial class Form1 : Form
         pictureBox2.Size = new Size(650, 320);
         pictureBox2.Paint += PictureBox2_Paint;
 
-        _oldValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 1]);
+        _oldValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 3]);
         _oldPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
-        _newValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 1]);
+        _newValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 3]);
         _newPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
 
         _oldValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;

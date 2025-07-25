@@ -9,15 +9,15 @@ namespace Connect4;
 public partial class Form1 : Form
 {
     private const int ArenaIterations = 100;
-    private const int DeepLearningThreshold = 54;
+    private const int DeepLearningThreshold = 51;
     private const double MaximumError = 0.10;
-    private const int MaxTrainingRuns = 5000;
-    private const int McstIterations = 800;
+    private const int MaxTrainingRuns = 2000;
+    private const int McstIterations = 400;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
-    private const int SelfPlayGames = 100;
-    private const int TelemetryHistorySaturation = 1;
-    private const int TrainingDataCount = 510;
+    private const int SelfPlayGames = 1000;
+    private const int TelemetryHistorySaturation = 2100;
+    private const int TrainingDataCount = 2100;
 
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -34,7 +34,7 @@ public partial class Form1 : Form
         bool skipTraining = false;
         int lastPolicyTrainingRuns = 0;
         double lastPolicyTrainingError = double.MaxValue;
-        double maximumError = 0.02;
+        double maximumError = 0.20;
 
         int i = 0;
         while (i < ArenaIterations && !_arenaCancelationToken.IsCancellationRequested)
@@ -75,6 +75,7 @@ public partial class Form1 : Form
             }
             else
             {
+                bossLives += bossLives < 3 ? 1 : 0;
                 BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
             }
 
@@ -84,7 +85,7 @@ public partial class Form1 : Form
                 return;
             }
 
-            if (lastPolicyTrainingRuns > MaxTrainingRuns)
+            if (lastPolicyTrainingRuns >= MaxTrainingRuns)
             {
                 maximumError += 0.02;
             }
@@ -247,7 +248,7 @@ public partial class Form1 : Form
         _yellowPercentHistory.Add(_yellowPercent);
         _drawPercentHistory.Add(_drawPercent);
 
-        UpdatePercentChart();
+        UpdatePercentChart(DeepLearningThreshold);
 
         _ = BeginInvoke(() =>
         {
@@ -419,7 +420,7 @@ public partial class Form1 : Form
         });
     }
 
-    private void UpdatePercentChart()
+    private void UpdatePercentChart(int deepLearningThreshold)
     {
         if (_redPercentHistory.Count == 0)
         {
@@ -429,6 +430,7 @@ public partial class Form1 : Form
         Invoke(() =>
         {
             winPercentChart.ClearData();
+            winPercentChart.DeepLearnThreshold = deepLearningThreshold;
 
             for (int i = 0; i < _redPercentHistory.Count; i++)
             {

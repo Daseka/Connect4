@@ -214,8 +214,12 @@ public class FlatDumbNetwork
                 double target = trainingOutputs[sample][node];
                 DeltaValues[lastLayerStart + node] = (target - outVal) * ActivationFunctions[lastLayer].Derivative(outVal);
 
-                double diff = target - outVal;
-                error += diff * diff;
+                //double diff = target - outVal;
+                //error += diff * diff;
+
+                double output = Math.Max(outVal, NearNullValue);
+                error += target * Math.Log(output);
+
                 setCount++;
             }
 
@@ -279,7 +283,8 @@ public class FlatDumbNetwork
             }
         }
 
-        error = Math.Sqrt(error / setCount);
+        //error = Math.Sqrt(error / setCount);
+        error = -error / setCount;
 
         return (Gradients, GradientBiases, error);
     }
