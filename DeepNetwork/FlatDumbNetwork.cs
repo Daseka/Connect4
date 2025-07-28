@@ -54,9 +54,10 @@ public class FlatDumbNetwork
         for (int i = 0; i < structure.Count; i++)
         {
             ActivationFunctions[i] = i == structure.Count - 1
+                //? new SoftMaxActivationFunction()
                 ? new SigmoidActivationFunction()
-            //    : new TanhActivationFunction();
-            : new LeakyReLUActivationFunction();
+                //: new TanhActivationFunction();
+                : new LeakyReLUActivationFunction();
         }
 
         // Value arrays
@@ -143,11 +144,12 @@ public class FlatDumbNetwork
             {
                 var weights = Weights.AsSpan(weightIndex, prevLayerSize);
                 double weightedSum = DotProduct(prevValues, weights) + Biases[biasIndex];
-                currValues[node] = ActivationFunctions[layer].Calculate(weightedSum);
+                currValues[node] = weightedSum;//ActivationFunctions[layer].Calculate(weightedSum);
                 weightIndex += prevLayerSize;
                 biasIndex++;
             }
 
+            ActivationFunctions[layer].Calculate(currValues);
             layerStart = currLayerStart;
         }
 
@@ -187,6 +189,13 @@ public class FlatDumbNetwork
 
     public (double[] gradients, double[] biases, double error) ComputeGradientsAndError(double[][] trainingInputs, double[][] trainingOutputs)
     {
+        return ActivationFunctions[^1] is  SoftMaxActivationFunction
+            ? ComputeGradientsAndErrorSoftmax(trainingInputs, trainingOutputs)
+            : ComputeGradientsAndErrorNormal(trainingInputs, trainingOutputs);
+    }
+
+    private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorNormal(double[][] trainingInputs, double[][] trainingOutputs)
+    {
         Array.Clear(Gradients, 0, Gradients.Length);
         Array.Clear(GradientBiases, 0, GradientBiases.Length);
         double error = 0.0;
@@ -213,10 +222,7 @@ public class FlatDumbNetwork
                 double outVal = Values[lastLayerStart + node];
                 double target = trainingOutputs[sample][node];
                 DeltaValues[lastLayerStart + node] = (target - outVal) * ActivationFunctions[lastLayer].Derivative(outVal);
-
-                //double diff = target - outVal;
-                //error += diff * diff;
-
+                
                 double output = Math.Max(outVal, NearNullValue);
                 error += target * Math.Log(output);
 
@@ -283,9 +289,111 @@ public class FlatDumbNetwork
             }
         }
 
-        //error = Math.Sqrt(error / setCount);
         error = -error / setCount;
 
+        return (Gradients, GradientBiases, error);
+    }
+
+    // Alternate version for softmax output layer
+    private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorSoftmax(double[][] trainingInputs, double[][] trainingOutputs)
+    {
+        Array.Clear(Gradients, 0, Gradients.Length);
+        Array.Clear(GradientBiases, 0, GradientBiases.Length);
+        double error = 0.0;
+        int setCount = 0;
+
+        int numLayers = Structure.Length;
+        int[] layerOffsets = new int[numLayers];
+        layerOffsets[0] = 0;
+        for (int l = 1; l < numLayers; l++)
+        {
+            layerOffsets[l] = layerOffsets[l - 1] + Structure[l - 1];
+        }
+
+        for (int sample = 0; sample < trainingInputs.Length; sample++)
+        {
+            // Forward pass
+            double[] _ = Calculate(trainingInputs[sample]);
+
+            // Compute softmax for output layer
+            int lastLayer = numLayers - 1;
+            int lastLayerStart = layerOffsets[lastLayer];
+            double[] outputValues = new double[Structure[lastLayer]];
+            for (int node = 0; node < outputValues.Length; node++)
+            {
+                outputValues[node] = Values[lastLayerStart + node];
+            }
+
+            // Compute output layer deltas and cross-entropy error
+            for (int node = 0; node < outputValues.Length; node++)
+            {
+                double target = trainingOutputs[sample][node];
+                DeltaValues[lastLayerStart + node] = target - outputValues[node];
+                error -= target * Math.Log(Math.Max(outputValues[node], NearNullValue));
+                setCount++;
+            }
+
+            // Backpropagate deltas
+            for (int layer = numLayers - 2; layer >= 1; layer--)
+            {
+                int layerStart = layerOffsets[layer];
+                int nextLayerStart = layerOffsets[layer + 1];
+                int currLayerSize = Structure[layer];
+                int nextLayerSize = Structure[layer + 1];
+
+                int weightBase = 0;
+                for (int l = 0; l < layer; l++)
+                {
+                    weightBase += Structure[l] * Structure[l + 1];
+                }
+
+                for (int node = 0; node < currLayerSize; node++)
+                {
+                    double sum = 0.0;
+                    for (int nextNode = 0; nextNode < nextLayerSize; nextNode++)
+                    {
+                        int wIdx = weightBase + currLayerSize * nextNode + node;
+                        sum += Weights[wIdx] * DeltaValues[nextLayerStart + nextNode];
+                    }
+                    double val = Values[layerStart + node];
+                    DeltaValues[layerStart + node] = sum * ActivationFunctions[layer].Derivative(val);
+                }
+            }
+
+            // Accumulate gradients
+            int weightIndex = 0;
+            for (int layer = 1; layer < numLayers; layer++)
+            {
+                int prevLayerStart = layerOffsets[layer - 1];
+                int currLayerStart = layerOffsets[layer];
+                int prevLayerSize = Structure[layer - 1];
+                int currLayerSize = Structure[layer];
+
+                for (int node = 0; node < currLayerSize; node++)
+                {
+                    for (int prevNode = 0; prevNode < prevLayerSize; prevNode++)
+                    {
+                        Gradients[weightIndex] += DeltaValues[currLayerStart + node] * Values[prevLayerStart + prevNode];
+                        weightIndex++;
+                    }
+                }
+            }
+
+            // Accumulate biases gradients
+            for (int layer = 1; layer < numLayers; layer++)
+            {
+                int layerStart = layerOffsets[layer];
+                int layerSize = Structure[layer];
+                int biasIndex = 0;
+                for (int node = 0; node < layerSize; node++)
+                {
+                    GradientBiases[biasIndex] += DeltaValues[layerStart + node];
+                    biasIndex++;
+                }
+            }
+        }
+
+        error /= setCount;
         return (Gradients, GradientBiases, error);
     }
 
@@ -325,6 +433,7 @@ public class FlatDumbNetwork
                 nameof(SigmoidActivationFunction) => new SigmoidActivationFunction(),
                 nameof(LeakyReLUActivationFunction) => new LeakyReLUActivationFunction(),
                 nameof(TanhActivationFunction) => new TanhActivationFunction(),
+                nameof(SoftMaxActivationFunction) => new SoftMaxActivationFunction(),
                 _ => throw new InvalidOperationException($"Unknown activation function: {activationFunctionTypes[i]}")
             };
         }

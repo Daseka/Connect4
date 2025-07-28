@@ -1,5 +1,6 @@
 using Connect4.GameParts;
 using DeepNetwork;
+using System.Diagnostics;
 
 namespace Connect4.Ais;
 
@@ -15,6 +16,7 @@ public class Mcts(
     private readonly TelemetryHistory _telemetryHistory = new();
     private const double MinimumPolicyValue = 0.01;
     private Node? _rootNode;
+    //private long _maxMiliseconds = 4000;
 
     public FlatDumbNetwork? PolicyNetwork { get; private set; } = policyNetwork;
     public FlatDumbNetwork? ValueNetwork { get; private set; } = valueNetwork;
@@ -38,7 +40,9 @@ public class Mcts(
         var rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
+        var stopwatch = Stopwatch.StartNew();
         for (int i = 0; i < _maxIterations; i++)
+        //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
         {
             Node? childNode = useNetworks
                 ? Select(rootNode, _random, PolicyNetwork!)
@@ -50,7 +54,7 @@ public class Mcts(
             
             Backpropagate(childNode, result);
         }
-
+        stopwatch.Stop();
         UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
         var bestChild = rootNode.GetMostValuableChild();

@@ -5,7 +5,7 @@ namespace Connect4.Ais;
 
 public class Node
 {
-    private const double ExplorationConstant = 1.41;
+    private const double ExplorationConstant =0.8;//1.41;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }

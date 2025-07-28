@@ -9,12 +9,9 @@
         {
             d = Math.Exp(d);
 
-            if (d < SmallNumberNegative)
-            {
-                return -1E+8;
-            }
-
-            return !(d > SmallNumberPositive) ? d : SmallNumberPositive;
+            return d < SmallNumberNegative 
+                ? -1E+8 
+                : !(d > SmallNumberPositive) ? d : SmallNumberPositive;
         }
     }
 }

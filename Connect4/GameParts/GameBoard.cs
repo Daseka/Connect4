@@ -168,6 +168,19 @@ public class GameBoard
         return CheckHorizontal(player) || CheckVertical(player) || CheckDiagonal(player);
     }
 
+    public bool HasDraw()
+    {
+        for (int col = 0; col < Columns; col++)
+        {
+            if (Board[0, col] == 0) 
+            {
+                return false;
+            }
+        }
+
+        return !HasWon((int)Player.Red) && !HasWon((int)Player.Yellow);
+    }
+
     public bool PlacePiece(int column, int player)
     {
         if (column is < 0 or >= Columns)

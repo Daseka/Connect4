@@ -13,7 +13,16 @@ public class LeakyReLUActivationFunction : IActivationFunction
 
     public double Calculate(double x)
     {
+        // Leaky ReLU: f(x) = x if x > 0, else f(x) = alpha * x
         return x >= 0 ? x : _alpha * x;
+    }
+
+    public void Calculate(Span<double> x)
+    {
+        for (int i = 0; i < x.Length; i++)
+        {
+            x[i] = x[i] >= 0 ? x[i] : _alpha * x[i]; 
+        }
     }
 
     public double Derivative(double gradientValue)

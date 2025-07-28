@@ -8,14 +8,14 @@ namespace Connect4;
 
 public partial class Form1 : Form
 {
-    private const int ArenaIterations = 100;
+    private const int ArenaIterations = 300;
     private const int DeepLearningThreshold = 51;
-    private const double MaximumError = 0.10;
-    private const int MaxTrainingRuns = 2000;
-    private const int McstIterations = 400;
+    private const double MaximumError = 0.20;
+    private const int MaxTrainingRuns = 3;
+    private const int McstIterations = 20000;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
-    private const int SelfPlayGames = 1000;
+    private const int SelfPlayGames = 500;
     private const int TelemetryHistorySaturation = 2100;
     private const int TrainingDataCount = 2100;
 
@@ -34,7 +34,7 @@ public partial class Form1 : Form
         bool skipTraining = false;
         int lastPolicyTrainingRuns = 0;
         double lastPolicyTrainingError = double.MaxValue;
-        double maximumError = 0.20;
+        double maximumError = 0.50;
 
         int i = 0;
         while (i < ArenaIterations && !_arenaCancelationToken.IsCancellationRequested)
@@ -46,8 +46,6 @@ public partial class Form1 : Form
                 await SelfPlayParallelAsync(McstIterations);
             }
             while (_telemetryHistory.Count < TelemetryHistorySaturation);
-
-            _telemetryHistory.SaveToFile();
 
             if (_redWithDrawPercent > DeepLearningThreshold)
             {
@@ -87,11 +85,11 @@ public partial class Form1 : Form
 
             if (lastPolicyTrainingRuns >= MaxTrainingRuns)
             {
-                maximumError += 0.02;
+                maximumError += 0.01;
             }
             else if (lastPolicyTrainingRuns < 100 && lastPolicyTrainingRuns > 0 && maximumError > MaximumError)
             {
-                maximumError -= 0.02;
+                maximumError -= 0.01;
             }
 
             if (!skipTraining)
@@ -110,7 +108,6 @@ public partial class Form1 : Form
 
         int processorCount = Environment.ProcessorCount;
         int parallelGames = Math.Max(2, processorCount - 1);
-        parallelGames = 16;
 
         int gamesPerThread = SelfPlayGames / parallelGames;
         int remainder = SelfPlayGames % parallelGames;
@@ -264,8 +261,6 @@ public partial class Form1 : Form
     private Task<(int runs, double error)> TrainAsync(Mcts mcts, double maximumError = MaximumError)
     {
         Invoke(() => listBox1.Items.Clear());
-
-        _telemetryHistory.LoadFromFile();
 
         TelemetryHistory telemetryHistory = _telemetryHistory;
         int timesToTrain = 1;

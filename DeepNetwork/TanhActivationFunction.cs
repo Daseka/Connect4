@@ -1,5 +1,6 @@
 ﻿namespace DeepNetwork;
 
+
 [Serializable]
 public class TanhActivationFunction : IActivationFunction
 {
@@ -9,6 +10,14 @@ public class TanhActivationFunction : IActivationFunction
     {
         // Tanh activation function: (e^x - e^(-x)) / (e^x + e^(-x))
         return 2.0 / (1.0 + BoundedMath.Exp(-2.0 * x)) - 1.0;
+    }
+
+    public void Calculate(Span<double> x)
+    {
+        for (int i = 0; i < x.Length; i++)
+        {
+            x[i] = 2.0 / (1.0 + BoundedMath.Exp(-2.0 * x[i])) - 1.0;
+        }
     }
 
     public double Derivative(double gradientValue)
