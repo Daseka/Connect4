@@ -176,8 +176,11 @@ public class SimpleDumbNetwork
             {
                 int previousLayer = layer - 1;
                 double sum = Sum(Values[previousLayer], Weights[previousLayer][node]);
-                Values[layer][node] = ActivationFunctions[layer].Calculate(sum);
+                Values[layer][node] = sum;
             }
+
+            Span<double> currentValues = Values[layer].AsSpan();
+            ActivationFunctions[layer].Calculate(currentValues);
         }
 
         return Values[^1];

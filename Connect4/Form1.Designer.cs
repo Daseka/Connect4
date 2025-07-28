@@ -33,8 +33,6 @@
             pictureBox1 = new PictureBox();
             listBox1 = new ListBox();
             button1 = new Button();
-            button2 = new Button();
-            button3 = new Button();
             button4 = new Button();
             button5 = new Button();
             button6 = new Button();
@@ -71,8 +69,6 @@
             tabPage1.Controls.Add(pictureBox1);
             tabPage1.Controls.Add(listBox1);
             tabPage1.Controls.Add(button1);
-            tabPage1.Controls.Add(button2);
-            tabPage1.Controls.Add(button3);
             tabPage1.Controls.Add(button4);
             tabPage1.Controls.Add(button5);
             tabPage1.Controls.Add(button6);
@@ -109,37 +105,17 @@
             button1.Name = "button1";
             button1.Size = new Size(75, 23);
             button1.TabIndex = 3;
-            button1.Text = "Save";
+            button1.Text = "Reset game";
             button1.UseVisualStyleBackColor = true;
             button1.Click += SaveButton_Click;
             // 
-            // button2
-            // 
-            button2.Location = new Point(781, 11);
-            button2.Name = "button2";
-            button2.Size = new Size(75, 23);
-            button2.TabIndex = 4;
-            button2.Text = "Load";
-            button2.UseVisualStyleBackColor = true;
-            button2.Click += LoadButton_Click;
-            // 
-            // button3
-            // 
-            button3.Location = new Point(862, 11);
-            button3.Name = "button3";
-            button3.Size = new Size(75, 23);
-            button3.TabIndex = 5;
-            button3.Text = "Train";
-            button3.UseVisualStyleBackColor = true;
-            button3.Click += TrainButton_Click;
-            // 
             // button4
             // 
-            button4.Location = new Point(943, 11);
+            button4.Location = new Point(1020, 11);
             button4.Name = "button4";
             button4.Size = new Size(100, 23);
             button4.TabIndex = 6;
-            button4.Text = "Parallel Play";
+            button4.Text = "Self play";
             button4.UseVisualStyleBackColor = true;
             button4.Click += SelfPlayButton_Click;
             // 
@@ -267,7 +243,9 @@
             Controls.Add(flowLayoutPanel1);
             Controls.Add(winPercentChart);
             Name = "Form1";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Connect4";
+            FormClosing += Form1_FormClosing;
             tabControl1.ResumeLayout(false);
             tabPage1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
@@ -288,8 +266,6 @@
         private PictureBox pictureBox1;
         private ListBox listBox1;
         private Button button1;
-        private Button button2;
-        private Button button3;
         private Button button4;
         private Button button5;
         private Button button6;

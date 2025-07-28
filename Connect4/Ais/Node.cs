@@ -5,7 +5,7 @@ namespace Connect4.Ais;
 
 public class Node
 {
-    private const double ExplorationConstant = 1.41;
+    private const double ExplorationConstant =0.8;//1.41;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
@@ -70,13 +70,6 @@ public class Node
         double[] boardStateArray = [.. GameBoard.StateToArray().Select(x => (double)x)];
         string id = GameBoard.StateToString();
         double[] policyProbability = policyNetwork.CalculateCached(id, boardStateArray);
-
-        if (Math.Round(policyProbability.Sum()) < 1 )
-        {
-            //randomly return a child node if the policy network does not know
-            Random random = new();
-            return Children[random.Next(Children.Count)];
-        }
 
         foreach (Node node in Children)
         {

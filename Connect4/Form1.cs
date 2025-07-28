@@ -32,10 +32,15 @@ public partial class Form1 : Form
         pictureBox2.Size = new Size(650, 320);
         pictureBox2.Paint += PictureBox2_Paint;
 
-        _oldValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 1]);
-        _oldPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
-        _newValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 1]);
-        _newPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
+        //_oldValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 3]);
+        //_oldPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
+        //_newValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 3]);
+        //_newPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
+
+        _oldValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
+        _oldPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
+        _newValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
+        _newPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
 
         _oldValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
         _oldPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
@@ -210,6 +215,13 @@ public partial class Form1 : Form
 
             EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
         }
+
+        if (_connect4Game.GameBoard.HasDraw())
+        {
+            _ = MessageBox.Show("It's a draw!");
+
+            EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
+        }
     }
 
     private void PictureBox1_Paint(object? sender, PaintEventArgs e)
@@ -219,9 +231,8 @@ public partial class Form1 : Form
 
     private void SaveButton_Click(object sender, EventArgs e)
     {
-        _telemetryHistory.SaveToFile();
-
-        _ = MessageBox.Show("Telemetry history saved successfully.");
+        _connect4Game.ResetGame();
+        pictureBox1.Refresh();
     }
 
     private void SelfPlayButton_Click(object sender, EventArgs e)
@@ -262,5 +273,19 @@ public partial class Form1 : Form
         _editorConnect4Game.SetState(textBox1.Text);
         pictureBox2.Refresh();
 
+    }
+
+    private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+    {
+        var save = MessageBox.Show(
+            "Save Telemetry?",
+            "Confirm Save",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question) == DialogResult.Yes;
+
+        if (save)
+        {
+            _telemetryHistory.SaveToFile();
+        }
     }
 }

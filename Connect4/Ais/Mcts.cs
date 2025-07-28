@@ -1,5 +1,6 @@
 using Connect4.GameParts;
 using DeepNetwork;
+using System.Diagnostics;
 
 namespace Connect4.Ais;
 
@@ -12,33 +13,52 @@ public class Mcts(
     private const int MaxColumnCount = 7;
     private readonly int _maxIterations = maxIterations;
     private readonly Random _random = random ?? new();
-    private TelemetryHistory _telemetryHistory = new();
+    private readonly TelemetryHistory _telemetryHistory = new();
     private const double MinimumPolicyValue = 0.01;
+    private Node? _rootNode;
+    //private long _maxMiliseconds = 4000;
 
     public FlatDumbNetwork? PolicyNetwork { get; private set; } = policyNetwork;
     public FlatDumbNetwork? ValueNetwork { get; private set; } = valueNetwork;
 
+    private Node FindRootNode(GameBoard gameBoard, int previousPlayer)
+    {
+        List<Node> children = _rootNode?.Children ?? [];
+        foreach (var childNode in children)
+        {
+            if (childNode.GameBoard.StateToString() == gameBoard.StateToString())
+            {
+                return childNode;
+            }
+        }
+
+        return new Node(gameBoard.Copy(), previousPlayer);
+    }
+
     public Task<int> GetBestMove(GameBoard gameBoard, int previousPlayer)
     {
-        var rootNode = new Node(gameBoard.Copy(), previousPlayer);
+        var rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
+        var stopwatch = Stopwatch.StartNew();
         for (int i = 0; i < _maxIterations; i++)
+        //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
         {
             Node? childNode = useNetworks
                 ? Select(rootNode, _random, PolicyNetwork!)
                 : Select(rootNode, _random);
 
             double result = useNetworks
-                ? Simulate(childNode, _random, ValueNetwork!)
+                ? Simulate(childNode, ValueNetwork!)
                 : Simulate(childNode, _random);
             
             Backpropagate(childNode, result);
         }
-
+        stopwatch.Stop();
         UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
         var bestChild = rootNode.GetMostValuableChild();
+        _rootNode = bestChild;
 
         return Task.FromResult(bestChild?.Move ?? -1);
     }
@@ -79,10 +99,11 @@ public class Mcts(
         }
 
         double[] boardStateArray = [.. node.GameBoard.StateToArray().Select(x => (double)x)];
-        string id = node.GameBoard.StateToString();
-        double winProbability = valueNetwork.CalculateCached(id, boardStateArray).First();
+        double[] winProbability = valueNetwork.CalculateCached(node.GameBoard.StateToString(), boardStateArray);
 
-        return winProbability;
+        return node.GameBoard.LastPlayed == Player.Red
+            ? winProbability[0]
+            : winProbability[1];
     }
 
     private static Node Expand(Node node, Random random)
@@ -205,20 +226,13 @@ public class Mcts(
         return RandomSimulation(node, random);
     }
 
-    private static double Simulate(Node node, Random random, FlatDumbNetwork valueNetwork)
+    private static double Simulate(Node node, FlatDumbNetwork valueNetwork)
     {
         return DeepSimulation(node, valueNetwork);
     }
 
     private static void UpdateTelemetryHistory(Node root, TelemetryHistory telemetryHistory)
     {
-        // too many results
-        //foreach (Node child in root.Children)
-        //{
-
-        //    UpdateTelemeryHistory(child, telemetryHistory);
-        //}
-
         double[] policy = new double[MaxColumnCount];
         foreach (Node child in root.Children)
         {

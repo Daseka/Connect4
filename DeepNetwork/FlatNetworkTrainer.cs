@@ -14,6 +14,7 @@ public class FlatNetworkTrainer(FlatDumbNetwork network)
         int chunkSize = total / threads;
         int remainder = total % threads;
         double[][] gradientsPerThread = new double[threads][];
+        double[][] gradientBiasesPerThread = new double[threads][];
         double[] errors = new double[threads];
         int[] counts = new int[threads];
 
@@ -31,7 +32,8 @@ public class FlatNetworkTrainer(FlatDumbNetwork network)
             Array.Copy(trainingOutputs, start, outputsPart, 0, count);
 
             FlatDumbNetwork clone = _network.Clone();
-            (gradientsPerThread[t], errors[t]) = clone.ComputeGradientsAndError(inputsPart, outputsPart);
+            (gradientsPerThread[t], gradientBiasesPerThread[t], errors[t]) = clone
+                .ComputeGradientsAndError(inputsPart, outputsPart);
         });
 
         // add all the gradients together and devide them by all the threads
@@ -46,6 +48,18 @@ public class FlatNetworkTrainer(FlatDumbNetwork network)
             _network.Gradients[i] = sum / threads;
         }
 
+        // add all the biases together and devide them by all the threads
+        for (int i = 0; i < _network.GradientBiases.Length; i++)
+        {
+            double sum = 0;
+            for (int t = 0; t < threads; t++)
+            {
+                sum += gradientBiasesPerThread[t][i];
+            }
+
+            _network.GradientBiases[i] = sum / threads;
+        }
+
         // Average error
         double totalError = 0;
         for (int t = 0; t < threads; t++)
@@ -55,7 +69,8 @@ public class FlatNetworkTrainer(FlatDumbNetwork network)
 
         _network.Error = totalError / threads;
 
-        _network.UpdateWeights();
+        //_network.UpdateWeights();
+        _network.UpdateWeightsAdam();
         _network.Trained = true;
         _network.LastError = _network.Error;
         _network.ClearCache();

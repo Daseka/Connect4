@@ -8,16 +8,16 @@ namespace Connect4;
 
 public partial class Form1 : Form
 {
-    private const int ArenaIterations = 100;
-    private const int DeepLearningThreshold = 54;
-    private const double MaximumError = 0.10;
-    private const int MaxTrainingRuns = 5000;
-    private const int McstIterations = 800;
+    private const int ArenaIterations = 300;
+    private const int DeepLearningThreshold = 51;
+    private const double MaximumError = 0.20;
+    private const int MaxTrainingRuns = 3;
+    private const int McstIterations = 20000;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
-    private const int SelfPlayGames = 100;
-    private const int TelemetryHistorySaturation = 100000;
-    private const int TrainingDataCount = 510;
+    private const int SelfPlayGames = 500;
+    private const int TelemetryHistorySaturation = 2100;
+    private const int TrainingDataCount = 2100;
 
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -34,7 +34,7 @@ public partial class Form1 : Form
         bool skipTraining = false;
         int lastPolicyTrainingRuns = 0;
         double lastPolicyTrainingError = double.MaxValue;
-        double maximumError = 0.02;
+        double maximumError = 0.50;
 
         int i = 0;
         while (i < ArenaIterations && !_arenaCancelationToken.IsCancellationRequested)
@@ -46,8 +46,6 @@ public partial class Form1 : Form
                 await SelfPlayParallelAsync(McstIterations);
             }
             while (_telemetryHistory.Count < TelemetryHistorySaturation);
-
-            _telemetryHistory.SaveToFile();
 
             if (_redWithDrawPercent > DeepLearningThreshold)
             {
@@ -75,22 +73,23 @@ public partial class Form1 : Form
             }
             else
             {
+                bossLives += bossLives < 3 ? 1 : 0;
                 BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
             }
 
-            if(_arenaCancelationToken.IsCancellationRequested)
+            if (_arenaCancelationToken.IsCancellationRequested)
             {
                 BeginInvoke(() => toolStripStatusLabel1.Text = "Battle Arena cancelled.");
                 return;
             }
 
-            if (lastPolicyTrainingRuns > MaxTrainingRuns)
+            if (lastPolicyTrainingRuns >= MaxTrainingRuns)
             {
-                maximumError += 0.02;
+                maximumError += 0.01;
             }
             else if (lastPolicyTrainingRuns < 100 && lastPolicyTrainingRuns > 0 && maximumError > MaximumError)
             {
-                maximumError -= 0.02;
+                maximumError -= 0.01;
             }
 
             if (!skipTraining)
@@ -109,7 +108,6 @@ public partial class Form1 : Form
 
         int processorCount = Environment.ProcessorCount;
         int parallelGames = Math.Max(2, processorCount - 1);
-        parallelGames = 16;
 
         int gamesPerThread = SelfPlayGames / parallelGames;
         int remainder = SelfPlayGames % parallelGames;
@@ -247,7 +245,7 @@ public partial class Form1 : Form
         _yellowPercentHistory.Add(_yellowPercent);
         _drawPercentHistory.Add(_drawPercent);
 
-        UpdatePercentChart();
+        UpdatePercentChart(DeepLearningThreshold);
 
         _ = BeginInvoke(() =>
         {
@@ -263,8 +261,6 @@ public partial class Form1 : Form
     private Task<(int runs, double error)> TrainAsync(Mcts mcts, double maximumError = MaximumError)
     {
         Invoke(() => listBox1.Items.Clear());
-
-        _telemetryHistory.LoadFromFile();
 
         TelemetryHistory telemetryHistory = _telemetryHistory;
         int timesToTrain = 1;
@@ -289,12 +285,12 @@ public partial class Form1 : Form
             {
                 error = valueTrainer.Train(valueTrainingData, valueExpectedData);
 
-                sameCount = previousError.Equals(Math.Round(error,6)) ? sameCount + 1 : 0;
-                previousError = Math.Round(error, 6);
+                sameCount = previousError.Equals(Math.Round(error, 8)) ? sameCount + 1 : 0;
+                previousError = Math.Round(error, 8);
                 run++;
                 BeginInvoke(() =>
                 {
-                    _ = listBox1.Items.Add($"Error {Math.Round(error, 5):F5} Runs {MaxTrainingRuns - run}");
+                    _ = listBox1.Items.Add($"Error {Math.Round(error, 8):F8} Runs {MaxTrainingRuns - run}");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
@@ -342,14 +338,14 @@ public partial class Form1 : Form
                 run2++;
                 BeginInvoke(() =>
                 {
-                    _ = listBox1.Items.Add($"Error {Math.Round(error2, 5):F5} Runs {MaxTrainingRuns - run2}");
+                    _ = listBox1.Items.Add($"Error {Math.Round(error2, 8):F8} Runs {MaxTrainingRuns - run2}");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
             while (run2 < MaxTrainingRuns && error2 > maximumError && sameCount2 < 50);
             stopwatch2.Stop();
 
-            string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2}";
+            string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2} same {sameCount2}";
             _ = BeginInvoke(() => listBox1.Items.Add(text));
 
             //Test the network 10 times
@@ -408,9 +404,9 @@ public partial class Form1 : Form
                 _redWithDrawPercent = Math.Round(_redPercent + _drawPercent / 2, 2);
 
                 Text = $"{totalGames}/{SelfPlayGames} - " +
-                    $"R: {_redPercent}% ({_redWithDrawPercent}%)" +
-                    $"Y: {_yellowPercent}% " +
-                    $"D: {_drawPercent}%" +
+                    $"R: {_redPercent:F2}% ({_redWithDrawPercent:F2}%)" +
+                    $"Y: {_yellowPercent:F2}% " +
+                    $"D: {_drawPercent:F2}%" +
                     $"Data: {_telemetryHistory.Count}";
 
                 int progressPercent = (int)(totalGames / (double)SelfPlayGames * 100);
@@ -419,7 +415,7 @@ public partial class Form1 : Form
         });
     }
 
-    private void UpdatePercentChart()
+    private void UpdatePercentChart(int deepLearningThreshold)
     {
         if (_redPercentHistory.Count == 0)
         {
@@ -429,6 +425,7 @@ public partial class Form1 : Form
         Invoke(() =>
         {
             winPercentChart.ClearData();
+            winPercentChart.DeepLearnThreshold = deepLearningThreshold;
 
             for (int i = 0; i < _redPercentHistory.Count; i++)
             {
