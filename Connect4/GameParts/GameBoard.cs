@@ -12,6 +12,8 @@ public class GameBoard
     public int[,] Board { get; private set; }
     public Player LastPlayed { get; private set; } = Player.None;
 
+    private int [] _playedLocation = [-1,-1];
+
     public GameBoard()
     {
         Board = new int[Rows, Columns];
@@ -51,6 +53,11 @@ public class GameBoard
                     2 => Brushes.Yellow,
                     _ => Brushes.LightGray
                 };
+
+                if (_playedLocation[0] == i && _playedLocation[1] == j)
+                {
+                    g.FillEllipse(Brushes.Blue, paddingLeft - 4 + j * (cellWidth ), paddingTop - 4 + i * (cellHeight), cellWidth + 8, cellHeight + 8);
+                }
 
                 g.FillEllipse(brush, paddingLeft + j * cellWidth, paddingTop + i * cellHeight, cellWidth, cellHeight);
             }
@@ -194,6 +201,7 @@ public class GameBoard
             {
                 Board[row, column] = player;
                 LastPlayed = (Player)player;
+                _playedLocation = [row, column];
 
                 return true;
             }
@@ -218,6 +226,9 @@ public class GameBoard
                 Board[i, j] = 0;
             }
         }
+
+        _playedLocation = [-1, -1];
+        LastPlayed = Player.None;
     }
 
     private static int GetColumnFromClick(MouseEventArgs? clickEvent, PictureBox pictureBox1)

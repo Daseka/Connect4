@@ -16,7 +16,7 @@ public class Mcts(
     private readonly TelemetryHistory _telemetryHistory = new();
     private const double MinimumPolicyValue = 0.01;
     private Node? _rootNode;
-    //private long _maxMiliseconds = 4000;
+    //private long _maxMiliseconds = 1000;
 
     public FlatDumbNetwork? PolicyNetwork { get; private set; } = policyNetwork;
     public FlatDumbNetwork? ValueNetwork { get; private set; } = valueNetwork;
