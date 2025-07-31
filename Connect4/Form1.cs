@@ -10,8 +10,10 @@ public partial class Form1 : Form
     private readonly Connect4Game _editorConnect4Game = new();
     private readonly List<GamePanel> _gamePanels = [];
 
+    private CancellationTokenSource _arenaCancelationToken = new();
     private CancellationTokenSource _cancellationTokenSource = new();
     private int _gamesPlayed = 0;
+    private bool _isBattleArenaRunning = false;
     private bool _isParallelSelfPlayRunning;
     private FlatDumbNetwork _newPolicyNetwork;
     private FlatDumbNetwork _newValueNetwork;
@@ -84,8 +86,7 @@ public partial class Form1 : Form
         _telemetryHistory.LoadFromFile();
         winPercentChart.DeepLearnThreshold = DeepLearningThreshold;
 
-        this.Resize += Form1_Resize;
-
+        Resize += Form1_Resize;
     }
 
     private static void EndGame(
@@ -129,11 +130,9 @@ public partial class Form1 : Form
         return winner;
     }
 
-    private bool _isBattleArenaRunning = false;
-    private CancellationTokenSource _arenaCancelationToken;
-
     private void Arena_Click(object sender, EventArgs e)
     {
+
         if (_isBattleArenaRunning)
         {
             _arenaCancelationToken.Cancel();
@@ -145,7 +144,6 @@ public partial class Form1 : Form
             _isBattleArenaRunning = true;
             _ = Task.Run(BattleArena);
         }
-
     }
 
     private void ClearChart_Click(object sender, EventArgs e)
@@ -160,7 +158,21 @@ public partial class Form1 : Form
         _ = MessageBox.Show("Chart history cleared successfully.");
     }
 
-    private void Form1_Resize(object sender, EventArgs e)
+    private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+    {
+        var save = MessageBox.Show(
+            "Save Telemetry?",
+            "Confirm Save",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question) == DialogResult.Yes;
+
+        if (save)
+        {
+            _telemetryHistory.SaveToFile();
+        }
+    }
+
+    private void Form1_Resize(object? sender, EventArgs e)
     {
         winPercentChart.Invalidate();
     }
@@ -229,6 +241,17 @@ public partial class Form1 : Form
         _connect4Game.DrawBoard(e.Graphics);
     }
 
+    private void PictureBox2_Paint(object? sender, PaintEventArgs e)
+    {
+        _editorConnect4Game.DrawBoard(e.Graphics);
+    }
+
+    private void ReadBoardStateButton_Click(object sender, EventArgs e)
+    {
+        _editorConnect4Game.SetState(textBox1.Text);
+        pictureBox2.Refresh();
+    }
+
     private void SaveButton_Click(object sender, EventArgs e)
     {
         _connect4Game.ResetGame();
@@ -256,36 +279,7 @@ public partial class Form1 : Form
 
     private void TrainButton_Click(object sender, EventArgs e)
     {
-        //_ = Task.Run(() => TrainAsync(_redMcts, 0.05));
-        //_ = Task.Run(() => TrainAsync(_yellowMcts, 0.05));
-
         TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
         TrainAsync(_yellowMcts, 0.05).GetAwaiter().GetResult();
-    }
-
-    private void PictureBox2_Paint(object? sender, PaintEventArgs e)
-    {
-        _editorConnect4Game.DrawBoard(e.Graphics);
-    }
-
-    private void ReadBoardStateButton_Click(object sender, EventArgs e)
-    {
-        _editorConnect4Game.SetState(textBox1.Text);
-        pictureBox2.Refresh();
-
-    }
-
-    private void Form1_FormClosing(object sender, FormClosingEventArgs e)
-    {
-        var save = MessageBox.Show(
-            "Save Telemetry?",
-            "Confirm Save",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question) == DialogResult.Yes;
-
-        if (save)
-        {
-            _telemetryHistory.SaveToFile();
-        }
     }
 }

@@ -10,9 +10,10 @@ public partial class Form1 : Form
 {
     private const int ArenaIterations = 300;
     private const int DeepLearningThreshold = 51;
-    private const double MaximumError = 0.20;
-    private const int MaxTrainingRuns = 3;
-    private const int McstIterations = 20000;
+    private const double MaximumError = 0.50;
+    private const double MinimumError = 0.20;
+    private const int MaxTrainingRuns = 100;
+    private const int McstIterations = 400;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
     private const int SelfPlayGames = 500;
@@ -34,7 +35,7 @@ public partial class Form1 : Form
         bool skipTraining = false;
         int lastPolicyTrainingRuns = 0;
         double lastPolicyTrainingError = double.MaxValue;
-        double maximumError = 0.50;
+        double maximumError = MaximumError;
 
         int i = 0;
         while (i < ArenaIterations && !_arenaCancelationToken.IsCancellationRequested)
@@ -87,7 +88,7 @@ public partial class Form1 : Form
             {
                 maximumError += 0.01;
             }
-            else if (lastPolicyTrainingRuns < 100 && lastPolicyTrainingRuns > 0 && maximumError > MaximumError)
+            else if (lastPolicyTrainingRuns < 100 && lastPolicyTrainingRuns > 0 && maximumError > MinimumError)
             {
                 maximumError -= 0.01;
             }
@@ -300,23 +301,6 @@ public partial class Form1 : Form
             string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
             _ = Invoke(() => listBox1.Items.Add(x));
 
-            //Test the network 10 times
-            for (int i = 0; i < 10; i++)
-            {
-                int index = random.Next(0, valueTrainingData.Length);
-                double[] input = valueTrainingData[index];
-                double[] output = mcts.ValueNetwork.Calculate(input);
-
-                //calculate the error
-                double expected = valueExpectedData[index][0];
-                double diffrence = Math.Abs(expected - output[0]);
-                BeginInvoke(() =>
-                {
-                    _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
-                    listBox1.TopIndex = listBox1.Items.Count - 1;
-                });
-            }
-
             //-----------------------
             //Train the policy network
             (double[][] policyTrainingData, double[][] policyExpectedData) = telemetryHistory
@@ -347,24 +331,7 @@ public partial class Form1 : Form
 
             string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2} same {sameCount2}";
             _ = BeginInvoke(() => listBox1.Items.Add(text));
-
-            //Test the network 10 times
-            for (int i = 0; i < 10; i++)
-            {
-                int index = random.Next(0, policyTrainingData.Length);
-                double[] input = policyTrainingData[index];
-                double[] output = mcts.PolicyNetwork.Calculate(input);
-
-                //calculate the error
-                double expected = policyExpectedData[index][0];
-                double diffrence = Math.Abs(expected - output[0]);
-                BeginInvoke(() =>
-                {
-                    _ = listBox1.Items.Add($"Run {i:D2}: Difference {Math.Round(diffrence, 2):F2}");
-                    listBox1.TopIndex = listBox1.Items.Count - 1;
-                });
-            }
-
+            
             minPolicRuns = minPolicRuns < run2 ? minPolicRuns : run2;
             minPolicyError = minPolicyError < error2 ? minPolicyError : error2;
         }

@@ -13,7 +13,7 @@ public class FlatDumbNetwork
     private const double VariableLearnRateBig = 1.2d;
     private const double VariableLearnRateSmall = 0.5d;
     private const int CacheSize = 500000;
-
+    private const double Lambda = 0.02;
     public IActivationFunction[] ActivationFunctions;
     public double[] DeltaValues;
     public double[] Gradients;
@@ -31,11 +31,11 @@ public class FlatDumbNetwork
     public int[] Structure;
 
     // Adam optimizer state
-    private double[] AdamM;
-    private double[] AdamV;
-    private double[] AdamMBias;
-    private double[] AdamVBias;
-    private int AdamT;
+    private readonly double[] _adamM;
+    private readonly double[] _adamV;
+    private readonly double[] _adamMBias;
+    private readonly double[] _adamVBias;
+    private int _adamT;
 
     private ConcurrentDictionary<string, double[]> _cachedValues = new();
     private ConcurrentQueue<string> _cacheKeys = new();
@@ -117,11 +117,11 @@ public class FlatDumbNetwork
             Biases[i] = random.NextDouble() - 0.5;
         }
 
-        AdamM = new double[Weights.Length];
-        AdamV = new double[Weights.Length];
-        AdamMBias = new double[Biases.Length];
-        AdamVBias = new double[Biases.Length];
-        AdamT = 0;
+        _adamM = new double[Weights.Length];
+        _adamV = new double[Weights.Length];
+        _adamMBias = new double[Biases.Length];
+        _adamVBias = new double[Biases.Length];
+        _adamT = 0;
     }
 
     public double[] Calculate(double[] input)
@@ -270,6 +270,8 @@ public class FlatDumbNetwork
                     for (int prevNode = 0; prevNode < prevLayerSize; prevNode++)
                     {
                         Gradients[weightIndex] += DeltaValues[currLayerStart + node] * Values[prevLayerStart + prevNode];
+                        //L2 regularization
+                        //Gradients[weightIndex] = (Gradients[weightIndex] + Lambda * Weights[weightIndex])/ trainingInputs.Length; 
                         weightIndex++;
                     }
                 }
@@ -596,31 +598,31 @@ public class FlatDumbNetwork
         }
 
     }
-    
-    public void UpdateWeightsAdam(double learningRate = 0.001, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
+
+    public void UpdateWeightsAdam(double learningRate = 0.0001, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
     {
-        AdamT++;
+        _adamT++;
         // Update weights
         for (int i = 0; i < Weights.Length; i++)
         {
             // Update biased first moment estimate
-            AdamM[i] = beta1 * AdamM[i] + (1 - beta1) * Gradients[i];
+            _adamM[i] = beta1 * _adamM[i] + (1 - beta1) * Gradients[i];
             // Update biased second raw moment estimate
-            AdamV[i] = beta2 * AdamV[i] + (1 - beta2) * (Gradients[i] * Gradients[i]);
+            _adamV[i] = beta2 * _adamV[i] + (1 - beta2) * (Gradients[i] * Gradients[i]);
             // Compute bias-corrected first moment estimate
-            double mHat = AdamM[i] / (1 - Math.Pow(beta1, AdamT));
+            double mHat = _adamM[i] / (1 - Math.Pow(beta1, _adamT));
             // Compute bias-corrected second raw moment estimate
-            double vHat = AdamV[i] / (1 - Math.Pow(beta2, AdamT));
+            double vHat = _adamV[i] / (1 - Math.Pow(beta2, _adamT));
             // Update parameter
             Weights[i] += learningRate * mHat / (Math.Sqrt(vHat) + epsilon);
         }
         // Update biases
         for (int i = 0; i < Biases.Length; i++)
         {
-            AdamMBias[i] = beta1 * AdamMBias[i] + (1 - beta1) * GradientBiases[i];
-            AdamVBias[i] = beta2 * AdamVBias[i] + (1 - beta2) * (GradientBiases[i] * GradientBiases[i]);
-            double mHat = AdamMBias[i] / (1 - Math.Pow(beta1, AdamT));
-            double vHat = AdamVBias[i] / (1 - Math.Pow(beta2, AdamT));
+            _adamMBias[i] = beta1 * _adamMBias[i] + (1 - beta1) * GradientBiases[i];
+            _adamVBias[i] = beta2 * _adamVBias[i] + (1 - beta2) * (GradientBiases[i] * GradientBiases[i]);
+            double mHat = _adamMBias[i] / (1 - Math.Pow(beta1, _adamT));
+            double vHat = _adamVBias[i] / (1 - Math.Pow(beta2, _adamT));
             Biases[i] += learningRate * mHat / (Math.Sqrt(vHat) + epsilon);
         }
     }
