@@ -269,9 +269,11 @@ public class FlatDumbNetwork
                 {
                     for (int prevNode = 0; prevNode < prevLayerSize; prevNode++)
                     {
-                        Gradients[weightIndex] += DeltaValues[currLayerStart + node] * Values[prevLayerStart + prevNode];
+                        
                         //L2 regularization
-                        //Gradients[weightIndex] = (Gradients[weightIndex] + Lambda * Weights[weightIndex])/ trainingInputs.Length; 
+                        Gradients[weightIndex] = (Gradients[weightIndex] + Lambda * Weights[weightIndex])/ trainingInputs.Length;
+                        //Gradients[weightIndex] += DeltaValues[currLayerStart + node] * Values[prevLayerStart + prevNode];
+
                         weightIndex++;
                     }
                 }
