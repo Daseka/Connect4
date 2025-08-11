@@ -87,6 +87,11 @@ public partial class Form1 : Form
         winPercentChart.DeepLearnThreshold = DeepLearningThreshold;
 
         Resize += Form1_Resize;
+
+        var singleTabControl = new SingleTabConnect4GameControl(_redMcts);
+        singleTabControl.Dock = DockStyle.Fill;
+        tabPage3.Controls.Clear();
+        tabPage3.Controls.Add(singleTabControl);
     }
 
     private static void EndGame(
@@ -246,12 +251,6 @@ public partial class Form1 : Form
         _editorConnect4Game.DrawBoard(e.Graphics);
     }
 
-    private void ReadBoardStateButton_Click(object sender, EventArgs e)
-    {
-        _editorConnect4Game.SetState(textBox1.Text);
-        pictureBox2.Refresh();
-    }
-
     private void SaveButton_Click(object sender, EventArgs e)
     {
         _connect4Game.ResetGame();
@@ -281,5 +280,11 @@ public partial class Form1 : Form
     {
         TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
         TrainAsync(_yellowMcts, 0.05).GetAwaiter().GetResult();
+    }
+
+    private void ReadBoardStateButton_Click(object sender, EventArgs e)
+    {
+        _editorConnect4Game.SetState(textBox1.Text);
+        pictureBox2.Refresh();
     }
 }

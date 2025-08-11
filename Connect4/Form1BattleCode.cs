@@ -13,10 +13,10 @@ public partial class Form1 : Form
     private const double MaximumError = 0.50;
     private const double MinimumError = 0.20;
     private const int MaxTrainingRuns = 100;
-    private const int McstIterations = 400;
+    private const int McstIterations = 800;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
-    private const int SelfPlayGames = 500;
+    private const int SelfPlayGames = 100;
     private const int TelemetryHistorySaturation = 2100;
     private const int TrainingDataCount = 2100;
 

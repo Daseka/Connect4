@@ -212,7 +212,7 @@ public class Mcts(
             return Expand(node, random);
         }
 
-        Node? bestChild = node.GetBestChild(policyNetwork);
+        Node? bestChild = node.GetBestChild(policyNetwork, random);
         while (bestChild is not null && bestChild.Visits > 0 && !bestChild.IsTerminal)
         {
             bestChild = Select(bestChild, random, policyNetwork);

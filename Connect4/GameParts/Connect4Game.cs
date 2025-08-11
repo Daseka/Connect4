@@ -2,7 +2,7 @@ namespace Connect4.GameParts;
 
 public class Connect4Game
 {
-    public int CurrentPlayer { get; private set; }
+    public int CurrentPlayer { get; set; }
     public GameBoard GameBoard { get; }
     public Winner Winner { get; private set; } = Winner.StillPlaying;
     public Connect4Game()

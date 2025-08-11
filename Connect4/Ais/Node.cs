@@ -2,11 +2,10 @@ using Connect4.GameParts;
 using DeepNetwork;
 
 namespace Connect4.Ais;
-
 public class Node
 {
-    //private const double ExplorationConstant =0.8;
-    private const double ExplorationConstant = 1.41;
+    private const double ExplorationConstant =0.8;
+    //private const double ExplorationConstant = 3.41;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
@@ -62,7 +61,7 @@ public class Node
         return bestChild;
     }
 
-    public Node? GetBestChild(FlatDumbNetwork policyNetwork)
+    public Node? GetBestChild(FlatDumbNetwork policyNetwork, Random random)
     {
         double currentMaxUcb = double.MinValue;
         Node? bestChild = null;
@@ -71,6 +70,12 @@ public class Node
         double[] boardStateArray = [.. GameBoard.StateToArray().Select(x => (double)x)];
         string id = GameBoard.StateToString();
         double[] policyProbability = policyNetwork.CalculateCached(id, boardStateArray);
+
+        // add noise to the policy if its not adding up to 1
+        if (Math.Round(policyProbability.Sum()) != 1)
+        {
+            DirchletNoise.AddNoise(policyProbability, random);
+        }
 
         foreach (Node node in Children)
         {
