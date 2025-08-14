@@ -13,7 +13,7 @@ public partial class Form1 : Form
     private const double MaximumError = 0.50;
     private const double MinimumError = 0.20;
     private const int MaxTrainingRuns = 100;
-    private const int McstIterations = 800;
+    private const int McstIterations = 400;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
     private const int SelfPlayGames = 100;
@@ -45,7 +45,7 @@ public partial class Form1 : Form
             {
                 // keep playing until we have enough data
                 await SelfPlayParallelAsync(McstIterations);
-            }
+            }   
             while (_telemetryHistory.Count < TelemetryHistorySaturation);
 
             if (_redWithDrawPercent > DeepLearningThreshold)
@@ -55,12 +55,13 @@ public partial class Form1 : Form
                     bossLives = 3;
 
                     //Only save the networks if Red has a win rate above deep learning threshold
-                    _redMcts.ValueNetwork?.SaveToFile(OldValueNetwork);
-                    _redMcts.PolicyNetwork?.SaveToFile(OldPolicyNetwork);
+                    NetworkSaver.SaveNetwork(_redMcts.ValueNetwork, OldValueNetwork);
+                    NetworkSaver.SaveNetwork(_redMcts.PolicyNetwork, OldPolicyNetwork);
 
                     // Load the higher win rate networks for Yellow
-                    _oldValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
-                    _oldPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
+                    _oldValueNetwork = NetworkLoader.LoadNetwork(OldValueNetwork) ?? _oldValueNetwork;
+                    _oldPolicyNetwork = NetworkLoader.LoadNetwork(OldPolicyNetwork) ?? _oldPolicyNetwork;
+
                     _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
                     BeginInvoke(() => toolStripStatusLabel1.Text = "Boss Dead: Yellow has new network");
@@ -273,23 +274,23 @@ public partial class Form1 : Form
             //-----------------------
             //Train the value network
             (double[][] valueTrainingData, double[][] valueExpectedData) = telemetryHistory
-                .GetTrainingValueData(TrainingDataCount);
+                //.GetTrainingValueData(TrainingDataCount);
+                .GetTrainingValueData(telemetryHistory.Count);
 
             int run = 0;
             int sameCount = 0;
             double previousError = 0;
             double error;
 
-            var valueTrainer = new FlatNetworkTrainer(mcts.ValueNetwork);
+            var valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
             var stopwatch = Stopwatch.StartNew();
             do
             {
                 error = valueTrainer.Train(valueTrainingData, valueExpectedData);
-
                 sameCount = previousError.Equals(Math.Round(error, 8)) ? sameCount + 1 : 0;
                 previousError = Math.Round(error, 8);
                 run++;
-                BeginInvoke(() =>
+                Invoke(() =>
                 {
                     _ = listBox1.Items.Add($"Error {Math.Round(error, 8):F8} Runs {MaxTrainingRuns - run}");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
@@ -304,23 +305,23 @@ public partial class Form1 : Form
             //-----------------------
             //Train the policy network
             (double[][] policyTrainingData, double[][] policyExpectedData) = telemetryHistory
-                .GetTrainingPolicyData(TrainingDataCount);
+                //.GetTrainingPolicyData(TrainingDataCount);
+                .GetTrainingPolicyData(telemetryHistory.Count);
 
             int run2 = 0;
             double sameCount2 = 0;
             double previousError2 = 0;
             double error2 = 0.0;
 
-            var policyTrainer = new FlatNetworkTrainer(mcts.PolicyNetwork);
+            var policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
             var stopwatch2 = Stopwatch.StartNew();
             do
             {
                 error2 = policyTrainer.Train(policyTrainingData, policyExpectedData);
-
                 sameCount2 = previousError2.Equals(error2) ? sameCount2 + 1 : 0;
                 previousError2 = error2;
                 run2++;
-                BeginInvoke(() =>
+                Invoke(() =>
                 {
                     _ = listBox1.Items.Add($"Error {Math.Round(error2, 8):F8} Runs {MaxTrainingRuns - run2}");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
@@ -330,7 +331,7 @@ public partial class Form1 : Form
             stopwatch2.Stop();
 
             string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2} same {sameCount2}";
-            _ = BeginInvoke(() => listBox1.Items.Add(text));
+            _ = Invoke(() => listBox1.Items.Add(text));
             
             minPolicRuns = minPolicRuns < run2 ? minPolicRuns : run2;
             minPolicyError = minPolicyError < error2 ? minPolicyError : error2;

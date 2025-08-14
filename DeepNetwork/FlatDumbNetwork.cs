@@ -5,7 +5,7 @@ using System.Numerics;
 
 namespace DeepNetwork;
 
-public class FlatDumbNetwork
+public class FlatDumbNetwork: IStandardNetwork
 {
     public IActivationFunction[] ActivationFunctions;
     public double[] Biases;
@@ -21,7 +21,7 @@ public class FlatDumbNetwork
     private const double NearNullValue = 1e-11d;
     private const double VariableLearnRateBig = 1.2d;
     private const double VariableLearnRateSmall = 0.5d;
-
+    private const double LearningRate = 0.0001;
     private readonly double[] _adamM;
     private readonly double[] _adamMBias;
     private readonly double[] _adamV;
@@ -42,6 +42,7 @@ public class FlatDumbNetwork
     public double Error { get; set; }
     public double LastError { get; set; }
     public bool Trained { get; set; }
+    public static string NetworkName { get; } = nameof(FlatDumbNetwork);
 
     public FlatDumbNetwork(IReadOnlyList<int> structure)
     {
@@ -124,7 +125,7 @@ public class FlatDumbNetwork
         _adamT = 0;
     }
 
-    public static FlatDumbNetwork? CreateFromFile(string fileName)
+    public static IStandardNetwork? CreateFromFile(string fileName)
     {
         if (!File.Exists(fileName))
         {
@@ -133,6 +134,13 @@ public class FlatDumbNetwork
 
         string json = File.ReadAllText(fileName);
         var jObject = JObject.Parse(json);
+
+        //Check if the file is for this network type
+        var name = jObject[nameof(NetworkName)]?.ToObject<string>()!;
+        if (name?.Equals(NetworkName) != true)
+        {
+            return null;
+        }
 
         int[] structure = jObject[nameof(Structure)]!.ToObject<int[]>()!;
         var network = new FlatDumbNetwork(structure)
@@ -252,6 +260,7 @@ public class FlatDumbNetwork
 
         var wrapper = new
         {
+            NetworkName,
             _deltaValues,
             Gradients,
             _previousGradients,
@@ -349,23 +358,18 @@ public class FlatDumbNetwork
         }
     }
 
-    public void UpdateWeightsAdam(double learningRate = 0.0001, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
+    public void UpdateWeightsAdam(double learningRate = LearningRate, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
     {
         _adamT++;
-        // Update weights
         for (int i = 0; i < Weights.Length; i++)
         {
-            // Update biased first moment estimate
             _adamM[i] = beta1 * _adamM[i] + (1 - beta1) * Gradients[i];
-            // Update biased second raw moment estimate
             _adamV[i] = beta2 * _adamV[i] + (1 - beta2) * (Gradients[i] * Gradients[i]);
-            // Compute bias-corrected first moment estimate
             double mHat = _adamM[i] / (1 - Math.Pow(beta1, _adamT));
-            // Compute bias-corrected second raw moment estimate
             double vHat = _adamV[i] / (1 - Math.Pow(beta2, _adamT));
-            // Update parameter
             Weights[i] += learningRate * mHat / (Math.Sqrt(vHat) + epsilon);
         }
+
         // Update biases
         for (int i = 0; i < Biases.Length; i++)
         {
@@ -407,7 +411,9 @@ public class FlatDumbNetwork
         return sum;
     }
 
-    private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorNormal(double[][] trainingInputs, double[][] trainingOutputs)
+    private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorNormal(
+        double[][] trainingInputs, 
+        double[][] trainingOutputs)
     {
         Array.Clear(Gradients, 0, Gradients.Length);
         Array.Clear(GradientBiases, 0, GradientBiases.Length);
@@ -511,7 +517,9 @@ public class FlatDumbNetwork
     }
 
     // Alternate version for softmax output layer
-    private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorSoftmax(double[][] trainingInputs, double[][] trainingOutputs)
+    private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorSoftmax(
+        double[][] trainingInputs, 
+        double[][] trainingOutputs)
     {
         Array.Clear(Gradients, 0, Gradients.Length);
         Array.Clear(GradientBiases, 0, GradientBiases.Length);

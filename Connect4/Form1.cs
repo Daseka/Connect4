@@ -15,10 +15,10 @@ public partial class Form1 : Form
     private int _gamesPlayed = 0;
     private bool _isBattleArenaRunning = false;
     private bool _isParallelSelfPlayRunning;
-    private FlatDumbNetwork _newPolicyNetwork;
-    private FlatDumbNetwork _newValueNetwork;
-    private FlatDumbNetwork _oldPolicyNetwork;
-    private FlatDumbNetwork _oldValueNetwork;
+    private IStandardNetwork _newPolicyNetwork;
+    private IStandardNetwork _newValueNetwork;
+    private IStandardNetwork _oldPolicyNetwork;
+    private IStandardNetwork _oldValueNetwork;
     private Mcts _redMcts;
     private Mcts _yellowMcts;
 
@@ -34,24 +34,30 @@ public partial class Form1 : Form
         pictureBox2.Size = new Size(650, 320);
         pictureBox2.Paint += PictureBox2_Paint;
 
-        //_oldValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 3]);
-        //_oldPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
-        //_newValueNetwork = new FlatDumbNetwork([127, 196, 98, 49, 3]);
-        //_newPolicyNetwork = new FlatDumbNetwork([127, 196, 98, 49, 7]);
-
-        _oldValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
-        _oldPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
-        _newValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
-        _newPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
-
-        _oldValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
-        _oldPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
+        bool useMiniBatchNetwork = true;
+        if (useMiniBatchNetwork)
+        {
+            _oldValueNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 3]);
+            _oldPolicyNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 7]);
+            _newValueNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 3]);
+            _newPolicyNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 7]);
+        }
+        else
+        {
+            _oldValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
+            _oldPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
+            _newValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
+            _newPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
+        }
+        
+        //_oldValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
+        //_oldPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
         _oldPolicyNetwork.Trained = true;
         _oldValueNetwork.Trained = true;
         _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
-        _newValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
-        _newPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
+        //_newValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
+        //_newPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
         _newPolicyNetwork.Trained = true;
         _newValueNetwork.Trained = true;
         _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
@@ -173,7 +179,9 @@ public partial class Form1 : Form
 
         if (save)
         {
-            _telemetryHistory.SaveToFile();
+            _redMcts.GetTelemetryHistory().SaveToFile();
+
+            //_telemetryHistory.SaveToFile();
         }
     }
 
@@ -198,9 +206,9 @@ public partial class Form1 : Form
     private void LoadButton_Click(object sender, EventArgs e)
     {
         _telemetryHistory.LoadFromFile();
-
-        _newValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
-        _newPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
+        _newValueNetwork = NetworkLoader.LoadNetwork(OldValueNetwork) ?? _newValueNetwork;
+        _newPolicyNetwork = NetworkLoader.LoadNetwork(OldPolicyNetwork) ?? _newPolicyNetwork;
+        
         _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
 
         _ = MessageBox.Show("telemetry and network loaded successfully.");
@@ -251,10 +259,12 @@ public partial class Form1 : Form
         _editorConnect4Game.DrawBoard(e.Graphics);
     }
 
-    private void SaveButton_Click(object sender, EventArgs e)
+    private void ResetButton_Click(object sender, EventArgs e)
     {
-        _connect4Game.ResetGame();
-        pictureBox1.Refresh();
+        TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
+
+        //_connect4Game.ResetGame();
+        //pictureBox1.Refresh();
     }
 
     private void SelfPlayButton_Click(object sender, EventArgs e)

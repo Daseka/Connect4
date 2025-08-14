@@ -43,15 +43,14 @@
             pictureBox2 = new PictureBox();
             button7 = new Button();
             label1 = new Label();
+            tabPage3 = new TabPage();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            tabPage3 = new TabPage();
             tabControl1.SuspendLayout();
             tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
-            tabPage3.SuspendLayout();
             statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
@@ -113,7 +112,7 @@
             button1.TabIndex = 3;
             button1.Text = "Reset game";
             button1.UseVisualStyleBackColor = true;
-            button1.Click += SaveButton_Click;
+            button1.Click += ResetButton_Click;
             // 
             // button4
             // 
@@ -150,7 +149,7 @@
             winPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             winPercentChart.BackColor = Color.Black;
             winPercentChart.DeepLearnThreshold = 55D;
-            winPercentChart.Location = new Point(6, 410);
+            winPercentChart.Location = new Point(6, 370);
             winPercentChart.Name = "winPercentChart";
             winPercentChart.Size = new Size(1318, 200);
             winPercentChart.TabIndex = 10;
@@ -167,10 +166,10 @@
             flowLayoutPanel1.AutoScroll = true;
             flowLayoutPanel1.BackColor = SystemColors.Control;
             flowLayoutPanel1.BorderStyle = BorderStyle.Fixed3D;
-            flowLayoutPanel1.Location = new Point(6, 634);
+            flowLayoutPanel1.Location = new Point(6, 593);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Padding = new Padding(5);
-            flowLayoutPanel1.Size = new Size(1347, 190);
+            flowLayoutPanel1.Size = new Size(1347, 231);
             flowLayoutPanel1.TabIndex = 8;
             // 
             // tabPage2
@@ -211,7 +210,7 @@
             button7.TabIndex = 2;
             button7.Text = "Read board state";
             button7.UseVisualStyleBackColor = true;
-            button7.Click += new System.EventHandler(this.ReadBoardStateButton_Click);
+            button7.Click += ReadBoardStateButton_Click;
             // 
             // label1
             // 
@@ -266,7 +265,6 @@
             tabPage2.ResumeLayout(false);
             tabPage2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
-            tabPage3.ResumeLayout(false);
             statusStrip1.ResumeLayout(false);
             statusStrip1.PerformLayout();
             ResumeLayout(false);

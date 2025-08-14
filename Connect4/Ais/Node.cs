@@ -4,8 +4,8 @@ using DeepNetwork;
 namespace Connect4.Ais;
 public class Node
 {
-    private const double ExplorationConstant =0.8;
-    //private const double ExplorationConstant = 3.41;
+    //private const double ExplorationConstant =0.8;
+    private const double ExplorationConstant = 3.41;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
@@ -61,7 +61,7 @@ public class Node
         return bestChild;
     }
 
-    public Node? GetBestChild(FlatDumbNetwork policyNetwork, Random random)
+    public Node? GetBestChild(IStandardNetwork policyNetwork, Random random)
     {
         double currentMaxUcb = double.MinValue;
         Node? bestChild = null;

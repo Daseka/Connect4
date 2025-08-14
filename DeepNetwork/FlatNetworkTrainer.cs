@@ -1,8 +1,18 @@
 ﻿namespace DeepNetwork;
 
-public class FlatNetworkTrainer(FlatDumbNetwork network)
+public class FlatNetworkTrainer : INetworkTrainer
 {
-    private readonly FlatDumbNetwork _network = network;
+    private readonly FlatDumbNetwork _network;
+
+    public FlatNetworkTrainer(IStandardNetwork network)
+    {
+        if (network is not FlatDumbNetwork flatNetwork)
+        {
+            throw new ArgumentException($"Network must be of type FlatDumbNetwork not {network.GetType().Name}", nameof(network));
+        }
+
+        _network = flatNetwork;
+    }
 
     public double Train(double[][] trainingInputs, double[][] trainingOutputs)
     {
@@ -78,7 +88,7 @@ public class FlatNetworkTrainer(FlatDumbNetwork network)
         return _network.Error;
     }
 
-    private int GetSafeThreadCount(int trainingInputCount)
+    private static int GetSafeThreadCount(int trainingInputCount)
     {
         if (trainingInputCount < 100)
         {

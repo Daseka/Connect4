@@ -6,8 +6,8 @@ namespace Connect4.Ais;
 
 public class Mcts(
     int maxIterations,
-    FlatDumbNetwork? valueNetwork = null,
-    FlatDumbNetwork? policyNetwork = null,
+    IStandardNetwork? valueNetwork = null,
+    IStandardNetwork? policyNetwork = null,
     Random? random = null)
 {
     private const int MaxColumnCount = 7;
@@ -18,8 +18,8 @@ public class Mcts(
     private Node? _rootNode;
     //private long _maxMiliseconds = 1000;
 
-    public FlatDumbNetwork? PolicyNetwork { get; private set; } = policyNetwork;
-    public FlatDumbNetwork? ValueNetwork { get; private set; } = valueNetwork;
+    public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
+    public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
 
     private Node FindRootNode(GameBoard gameBoard, int previousPlayer)
     {
@@ -89,7 +89,7 @@ public class Mcts(
         }
     }
 
-    private static double DeepSimulation(Node node, FlatDumbNetwork valueNetwork)
+    private static double DeepSimulation(Node node, IStandardNetwork valueNetwork)
     {
         //if last player won no need to calculate value of network
         if (node.GameBoard.HasWon((int)node.GameBoard.LastPlayed))
@@ -200,7 +200,7 @@ public class Mcts(
         return bestChild ?? node;
     }
 
-    private static Node Select(Node node, Random random, FlatDumbNetwork policyNetwork)
+    private static Node Select(Node node, Random random, IStandardNetwork policyNetwork)
     {
         if (node.IsTerminal)
         {
@@ -226,7 +226,7 @@ public class Mcts(
         return RandomSimulation(node, random);
     }
 
-    private static double Simulate(Node node, FlatDumbNetwork valueNetwork)
+    private static double Simulate(Node node, IStandardNetwork valueNetwork)
     {
         return DeepSimulation(node, valueNetwork);
     }
