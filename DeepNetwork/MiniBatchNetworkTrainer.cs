@@ -2,6 +2,7 @@
 
 public class MiniBatchNetworkTrainer : INetworkTrainer
 {
+    private const int BatchSize = 1000;
     private readonly MiniBatchMatrixNetwork _network;
     
     public MiniBatchNetworkTrainer(IStandardNetwork network)
@@ -15,8 +16,13 @@ public class MiniBatchNetworkTrainer : INetworkTrainer
     
     public double Train(double[][] trainingInputs, double[][] trainingOutputs)
     {
+        if (trainingInputs.Length == 0)
+        {
+            return 0;     
+        }
+
         // Use the correct parameter order: inputs, targets, batchSize, epochs, learningRate
-        double error = _network.TrainMiniBatch(trainingInputs, trainingOutputs, 32);
+        double error = _network.TrainMiniBatch(trainingInputs, trainingOutputs, BatchSize);
         _network.Trained = true;
         _network.ClearCache();
 

@@ -10,16 +10,14 @@ public partial class Form1 : Form
 {
     private const int ArenaIterations = 300;
     private const int DeepLearningThreshold = 51;
-    private const double MaximumError = 0.50;
-    private const double MinimumError = 0.20;
-    private const int MaxTrainingRuns = 100;
-    private const int McstIterations = 400;
+    private const double MaximumError = 0.10;
+    private const int McstIterations = 1600;
+    private const int MinimumGameCount = 4;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
     private const int SelfPlayGames = 100;
-    private const int TelemetryHistorySaturation = 2100;
-    private const int TrainingDataCount = 2100;
-
+    private const int TelemetryHistorySaturation = 1000;
+    private const int TrainingDataCount = 1000;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
     private readonly TelemetryHistory _telemetryHistory = new();
@@ -33,22 +31,20 @@ public partial class Form1 : Form
     {
         int bossLives = 3;
         bool skipTraining = false;
-        int lastPolicyTrainingRuns = 0;
-        double lastPolicyTrainingError = double.MaxValue;
         double maximumError = MaximumError;
 
         int i = 0;
         while (i < ArenaIterations && !_arenaCancelationToken.IsCancellationRequested)
         {
             i++;
-            do
-            {
-                // keep playing until we have enough data
-                await SelfPlayParallelAsync(McstIterations);
-            }   
-            while (_telemetryHistory.Count < TelemetryHistorySaturation);
 
-            if (_redWithDrawPercent > DeepLearningThreshold)
+            // play atleast approximitly 10k games to have enough data
+            int initialGames = _telemetryHistory.Count < TelemetryHistorySaturation
+                ? TelemetryHistorySaturation / 10
+                : 0;
+            await SelfPlayParallelAsync(McstIterations, initialGames);
+
+            if (_redWithDrawPercent >= DeepLearningThreshold)
             {
                 if (bossLives <= 1)
                 {
@@ -64,46 +60,37 @@ public partial class Form1 : Form
 
                     _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
-                    BeginInvoke(() => toolStripStatusLabel1.Text = "Boss Dead: Yellow has new network");
+                    _ = BeginInvoke(() => toolStripStatusLabel1.Text = "Boss Dead: Yellow has new network");
                 }
                 else
                 {
                     skipTraining = true;
                     bossLives--;
-                    BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: Reduced boss life skipping training");
+                    _ = BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: Reduced boss life skipping training");
                 }
             }
             else
             {
                 bossLives += bossLives < 3 ? 1 : 0;
-                BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
+                _ = BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
             }
 
             if (_arenaCancelationToken.IsCancellationRequested)
             {
-                BeginInvoke(() => toolStripStatusLabel1.Text = "Battle Arena cancelled.");
+                _ = BeginInvoke(() => toolStripStatusLabel1.Text = "Battle Arena cancelled.");
                 return;
-            }
-
-            if (lastPolicyTrainingRuns >= MaxTrainingRuns)
-            {
-                maximumError += 0.01;
-            }
-            else if (lastPolicyTrainingRuns < 100 && lastPolicyTrainingRuns > 0 && maximumError > MinimumError)
-            {
-                maximumError -= 0.01;
             }
 
             if (!skipTraining)
             {
-                (lastPolicyTrainingRuns, lastPolicyTrainingError) = await TrainAsync(_redMcts, maximumError);
+                _ = await TrainAsync(_redMcts, maximumError);
             }
 
             skipTraining = false;
         }
     }
 
-    private async Task SelfPlayParallelAsync(int mcstIterations)
+    private async Task SelfPlayParallelAsync(int mcstIterations, int initialGames = 0)
     {
         _cancellationTokenSource = new CancellationTokenSource();
         CancellationToken cancellationToken = _cancellationTokenSource.Token;
@@ -111,8 +98,10 @@ public partial class Form1 : Form
         int processorCount = Environment.ProcessorCount;
         int parallelGames = Math.Max(2, processorCount - 1);
 
-        int gamesPerThread = SelfPlayGames / parallelGames;
-        int remainder = SelfPlayGames % parallelGames;
+        int totalGames = initialGames > 0 ? initialGames : SelfPlayGames;
+
+        int gamesPerThread = totalGames / parallelGames;
+        int remainder = totalGames % parallelGames;
 
         Invoke(() =>
         {
@@ -174,7 +163,8 @@ public partial class Form1 : Form
 
                             if (move == -1)
                             {
-                                mcts.SetWinnerTelemetryHistory(Winner.Draw);
+                                redMcts.SetWinnerTelemetryHistory(Winner.Draw);
+                                yellowMcts.SetWinnerTelemetryHistory(Winner.Draw);
                                 game.ResetGame();
                                 gameEnded = true;
 
@@ -188,7 +178,7 @@ public partial class Form1 : Form
                                 });
 
                                 globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+                                _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
                                 continue;
                             }
@@ -198,7 +188,8 @@ public partial class Form1 : Form
 
                             if (winner != 0)
                             {
-                                mcts.SetWinnerTelemetryHistory(game.Winner);
+                                redMcts.SetWinnerTelemetryHistory(game.Winner);
+                                yellowMcts.SetWinnerTelemetryHistory(game.Winner);
                                 gameEnded = true;
 
                                 if (winner == 1)
@@ -214,7 +205,7 @@ public partial class Form1 : Form
 
                                 _ = BeginInvoke(() => panel.RecordResult(game.Winner));
                                 globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+                                _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
                                 game.ResetGame();
                                 _ = BeginInvoke(() => pictureBox.Refresh());
@@ -242,7 +233,7 @@ public partial class Form1 : Form
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        _ = BeginInvoke(() => UpdateGlobalStats(globalStats));
+        _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
         _redPercentHistory.Add(_redWithDrawPercent);
         _yellowPercentHistory.Add(_yellowPercent);
         _drawPercentHistory.Add(_drawPercent);
@@ -262,92 +253,55 @@ public partial class Form1 : Form
 
     private Task<(int runs, double error)> TrainAsync(Mcts mcts, double maximumError = MaximumError)
     {
-        Invoke(() => listBox1.Items.Clear());
+        Invoke(listBox1.Items.Clear);
 
         TelemetryHistory telemetryHistory = _telemetryHistory;
-        int timesToTrain = 1;
         var random = new Random();
         int minPolicRuns = int.MaxValue;
         double minPolicyError = double.MaxValue;
-        for (int t = 0; t < timesToTrain; t++)
+
+        INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
+        INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
+
+        int steps = 100;
+        var stopwatch = Stopwatch.StartNew();
+
+        // get training data inputs and expected outputs that have minimum game count
+        (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
+            .GetTrainingData(TrainingDataCount, MinimumGameCount);
+
+        for (int i = 0; i < steps; i++)
         {
-            //-----------------------
-            //Train the value network
-            (double[][] valueTrainingData, double[][] valueExpectedData) = telemetryHistory
-                //.GetTrainingValueData(TrainingDataCount);
-                .GetTrainingValueData(telemetryHistory.Count);
-
-            int run = 0;
-            int sameCount = 0;
-            double previousError = 0;
-            double error;
-
-            var valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
-            var stopwatch = Stopwatch.StartNew();
-            do
+            double error = valueTrainer.Train(trainingData, valueExpectedData);
+            Invoke(() =>
             {
-                error = valueTrainer.Train(valueTrainingData, valueExpectedData);
-                sameCount = previousError.Equals(Math.Round(error, 8)) ? sameCount + 1 : 0;
-                previousError = Math.Round(error, 8);
-                run++;
-                Invoke(() =>
-                {
-                    _ = listBox1.Items.Add($"Error {Math.Round(error, 8):F8} Runs {MaxTrainingRuns - run}");
-                    listBox1.TopIndex = listBox1.Items.Count - 1;
-                });
-            }
-            while (run < MaxTrainingRuns && error > maximumError && sameCount < 50);
-            stopwatch.Stop();
+                _ = listBox1.Items.Add($"V:Error {Math.Round(error, 8):F8}");
+                listBox1.TopIndex = listBox1.Items.Count - 1;
+            });
 
-            string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms after {run} runs with error {error}";
-            _ = Invoke(() => listBox1.Items.Add(x));
-
-            //-----------------------
-            //Train the policy network
-            (double[][] policyTrainingData, double[][] policyExpectedData) = telemetryHistory
-                //.GetTrainingPolicyData(TrainingDataCount);
-                .GetTrainingPolicyData(telemetryHistory.Count);
-
-            int run2 = 0;
-            double sameCount2 = 0;
-            double previousError2 = 0;
-            double error2 = 0.0;
-
-            var policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
-            var stopwatch2 = Stopwatch.StartNew();
-            do
+            double error2 = policyTrainer.Train(trainingData, policyExpectedData);
+            Invoke(() =>
             {
-                error2 = policyTrainer.Train(policyTrainingData, policyExpectedData);
-                sameCount2 = previousError2.Equals(error2) ? sameCount2 + 1 : 0;
-                previousError2 = error2;
-                run2++;
-                Invoke(() =>
-                {
-                    _ = listBox1.Items.Add($"Error {Math.Round(error2, 8):F8} Runs {MaxTrainingRuns - run2}");
-                    listBox1.TopIndex = listBox1.Items.Count - 1;
-                });
-            }
-            while (run2 < MaxTrainingRuns && error2 > maximumError && sameCount2 < 50);
-            stopwatch2.Stop();
-
-            string text = $"Training profile completed in {stopwatch2.ElapsedMilliseconds} ms after {run2} runs with error {error2} same {sameCount2}";
-            _ = Invoke(() => listBox1.Items.Add(text));
-            
-            minPolicRuns = minPolicRuns < run2 ? minPolicRuns : run2;
-            minPolicyError = minPolicyError < error2 ? minPolicyError : error2;
+                _ = listBox1.Items.Add($"P:Error {Math.Round(error2, 8):F8}");
+                listBox1.TopIndex = listBox1.Items.Count - 1;
+            });
         }
 
-        string message = $"Last Max error = {maximumError} next Max error = {minPolicyError}";
+        stopwatch.Stop();
+
+        string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms";
         Invoke(() =>
         {
-            listBox1.Items.Add(message);
+            _ = listBox1.Items.Add(x);
             listBox1.TopIndex = listBox1.Items.Count - 1;
         });
 
         return Task.FromResult<(int, double)>((minPolicRuns, minPolicyError));
     }
 
-    private void UpdateGlobalStats(ConcurrentDictionary<int, (int red, int yellow, int draw, int total)> globalStats)
+    private void UpdateGlobalStats(
+        ConcurrentDictionary<int, (int red, int yellow, int draw, int total)> globalStats,
+        int totalGamesToPlay)
     {
         int totalRed = 0;
         int totalYellow = 0;
@@ -371,14 +325,14 @@ public partial class Form1 : Form
                 _drawPercent = Math.Round(totalDraw / (double)totalGames * 100, 2);
                 _redWithDrawPercent = Math.Round(_redPercent + _drawPercent / 2, 2);
 
-                Text = $"{totalGames}/{SelfPlayGames} - " +
+                Text = $"{totalGames}/{totalGamesToPlay} - " +
                     $"R: {_redPercent:F2}% ({_redWithDrawPercent:F2}%)" +
                     $"Y: {_yellowPercent:F2}% " +
                     $"D: {_drawPercent:F2}%" +
                     $"Data: {_telemetryHistory.Count}";
 
-                int progressPercent = (int)(totalGames / (double)SelfPlayGames * 100);
-                toolStripStatusLabel1.Text = $"Running: {totalGames}/{SelfPlayGames} games completed ({progressPercent}%)";
+                int progressPercent = (int)(totalGames / (double)totalGamesToPlay * 100);
+                toolStripStatusLabel1.Text = $"Running: {totalGames}/{totalGamesToPlay} games completed ({progressPercent}%)";
             }
         });
     }

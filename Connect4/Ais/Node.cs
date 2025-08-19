@@ -4,8 +4,8 @@ using DeepNetwork;
 namespace Connect4.Ais;
 public class Node
 {
-    //private const double ExplorationConstant =0.8;
-    private const double ExplorationConstant = 3.41;
+    private const double ExplorationConstant =0.8;
+    //private const double ExplorationConstant = 3.41;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
@@ -71,11 +71,9 @@ public class Node
         string id = GameBoard.StateToString();
         double[] policyProbability = policyNetwork.CalculateCached(id, boardStateArray);
 
-        // add noise to the policy if its not adding up to 1
-        if (Math.Round(policyProbability.Sum()) != 1)
-        {
-            DirchletNoise.AddNoise(policyProbability, random);
-        }
+        
+        //DirchletNoise.AddNoise(policyProbability, random);
+        
 
         foreach (Node node in Children)
         {
@@ -102,15 +100,15 @@ public class Node
     public Node? GetMostValuableChild()
     {
         double currentMaxValue = double.MinValue;
-        double currentMaxVisits = double.MinValue;
+        double currentMinVisits = double.MinValue;
         Node? bestChild = null;
 
         foreach (Node node in Children)
         {
             double value = node.Visits == 0 ? 0 : node.Wins / node.Visits;
-            if (value >= currentMaxValue || (value == currentMaxValue && node.Visits > currentMaxVisits))
+            if (value >= currentMaxValue || (value == currentMaxValue && node.Visits < currentMinVisits))
             {
-                currentMaxVisits = node.Visits;
+                currentMinVisits = node.Visits;
                 currentMaxValue = value;
                 bestChild = node;
             }

@@ -148,7 +148,7 @@
             // 
             winPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             winPercentChart.BackColor = Color.Black;
-            winPercentChart.DeepLearnThreshold = 55D;
+            winPercentChart.DeepLearnThreshold = 55;
             winPercentChart.Location = new Point(6, 370);
             winPercentChart.Name = "winPercentChart";
             winPercentChart.Size = new Size(1318, 200);

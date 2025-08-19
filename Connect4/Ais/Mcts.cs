@@ -16,7 +16,6 @@ public class Mcts(
     private readonly TelemetryHistory _telemetryHistory = new();
     private const double MinimumPolicyValue = 0.01;
     private Node? _rootNode;
-    //private long _maxMiliseconds = 1000;
 
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
     public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
@@ -96,6 +95,13 @@ public class Mcts(
         {
             node.IsTerminal = true;
             return 1;
+        }
+
+        // if node is terminal and previous player didnt win then it's a draw
+        if (node.GameBoard.HasDraw())
+        {
+            node.IsTerminal = true;
+            return 0;
         }
 
         double[] boardStateArray = [.. node.GameBoard.StateToArray().Select(x => (double)x)];
@@ -237,6 +243,12 @@ public class Mcts(
         foreach (Node child in root.Children)
         {
             policy[child.Move] = Math.Max(child.Visits / root.Visits, MinimumPolicyValue);
+        }
+
+        // if the policy is all zero then dont store it because it means no moves are posible from this node
+        if (policy.Sum() == 0)
+        {
+            return;
         }
 
         telemetryHistory.StoreTempData(root.GameBoard, policy);

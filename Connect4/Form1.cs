@@ -100,7 +100,7 @@ public partial class Form1 : Form
         tabPage3.Controls.Add(singleTabControl);
     }
 
-    private static void EndGame(
+    private void EndGame(
         Connect4Game connect4Game,
         Mcts mcts,
         ListBox listBox,
@@ -108,6 +108,7 @@ public partial class Form1 : Form
     {
         mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
         connect4Game.ResetGame();
+        _telemetryHistory.MergeFrom(mcts.GetTelemetryHistory());
 
         pictureBox.Invoke(pictureBox.Refresh);
         listBox.Invoke(listBox.Items.Clear);
@@ -179,9 +180,7 @@ public partial class Form1 : Form
 
         if (save)
         {
-            _redMcts.GetTelemetryHistory().SaveToFile();
-
-            //_telemetryHistory.SaveToFile();
+            _telemetryHistory.SaveToFile();
         }
     }
 
@@ -261,10 +260,10 @@ public partial class Form1 : Form
 
     private void ResetButton_Click(object sender, EventArgs e)
     {
-        TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
+        //TrainAsync(_redMcts, 0.02).GetAwaiter().GetResult();
 
-        //_connect4Game.ResetGame();
-        //pictureBox1.Refresh();
+        _connect4Game.ResetGame();
+        pictureBox1.Refresh();
     }
 
     private void SelfPlayButton_Click(object sender, EventArgs e)

@@ -171,7 +171,7 @@ namespace Connect4.GameParts
                 for (int i = 0; i < redPoints.Length; i++)
                 {
                     // Choose color based on value - green if > 60, red otherwise
-                    Color pointColor = _redPoints[i] > DeepLearnThreshold
+                    Color pointColor = _redPoints[i] >= DeepLearnThreshold
                         ? Color.FromArgb(0, 255, 0) 
                         : Color.FromArgb(255, 0, 0);
                     g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);

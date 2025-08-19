@@ -12,8 +12,13 @@ namespace DeepNetwork;
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
     private const int CacheSize = 500000;
+    private const double Lambda = 0.02;
+    private const double LearningRate = 0.00001;
     private const double NearNullValue = 1e-11d;
-    private const double LearningRate = 0.001;
+    private const int MaximumStepSize = 50;
+    private const double MinimumStepSize = 1e-6d;
+    private const double VariableLearnRateBig = 0.000012d;
+    private const double VariableLearnRateSmall = 0.000005d;
     private readonly IActivationFunction[] _activations;
     private readonly ConcurrentDictionary<string, double[]> _cachedValues = new();
     private readonly ConcurrentQueue<string> _cacheKeys = new();
@@ -45,6 +50,15 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
     private double[] _values;
     private int[] _weightOffsets;
     private Matrix<double>[] _weights;
+
+    // RPROP-like optimizer state (per-parameter step sizes and history)
+    private Matrix<double>[] _previousGradients;
+    private Matrix<double>[] _previousWeightChange;
+    private Matrix<double>[] _updateValues;
+    private Vector<double>[] _previousBiasGradients;
+    private Vector<double>[] _previousBiasesChange;
+    private Vector<double>[] _updateBiasesValues;
+
     public static string NetworkName { get; } = nameof(MiniBatchMatrixNetwork);
     public double Error { get; set; }
     public Vector<double>[] GradientBiases { get; private set; }
@@ -78,6 +92,14 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         GradientBiases = new Vector<double>[layers];
         _adamT = 0;
 
+        // RPROP-like state
+        _previousGradients = new Matrix<double>[layers];
+        _previousWeightChange = new Matrix<double>[layers];
+        _updateValues = new Matrix<double>[layers];
+        _previousBiasGradients = new Vector<double>[layers];
+        _previousBiasesChange = new Vector<double>[layers];
+        _updateBiasesValues = new Vector<double>[layers];
+
         for (int i = 0; i < layers; i++)
         {
             _weights[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
@@ -88,8 +110,17 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             _adamVBias[i] = Vector<double>.Build.Dense(structure[i + 1]);
             Gradients[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
             GradientBiases[i] = Vector<double>.Build.Dense(structure[i + 1]);
-            InitWeights(_weights[i], structure[i], structure[i + 1]);
-            InitBiases(_biases[i]);
+
+            // RPROP-like state init
+            _previousGradients[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
+            _previousWeightChange[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
+            _updateValues[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i], 0.001);
+            _previousBiasGradients[i] = Vector<double>.Build.Dense(structure[i + 1]);
+            _previousBiasesChange[i] = Vector<double>.Build.Dense(structure[i + 1]);
+            _updateBiasesValues[i] = Vector<double>.Build.Dense(structure[i + 1], 0.001);
+
+            InitWeights(_weights[i], structure[i], structure[i + 1], _rand);
+            InitBiases(_biases[i], _rand);
         }
 
         // Sync matrices to flat arrays
@@ -98,8 +129,10 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         for (int i = 0; i < structure.Length; i++)
         {
             _activations[i] = activationFactory?.Invoke(i) ?? (i == structure.Length - 1
-                ? new SigmoidActivationFunction()
-                : new LeakyReLUActivationFunction());
+                //? new SigmoidActivationFunction()
+                ? new SoftMaxActivationFunction()
+                : new TanhActivationFunction());
+                //: new LeakyReLUActivationFunction());
         }
     }
 
@@ -169,17 +202,19 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             var prevValues = _values.AsSpan(layerStart, prevLayerSize);
             var currValues = _values.AsSpan(currLayerStart, currLayerSize);
 
+            // Compute weighted sums for the current layer
             for (int node = 0; node < currLayerSize; node++)
             {
                 var weights = _flatWeights.AsSpan(weightIndex, prevLayerSize);
                 double weightedSum = DotProduct(prevValues, weights) + _flatBiases[biasIndex];
-                currValues[node] = _activations[layer].Calculate(weightedSum);
+                currValues[node] = weightedSum;
                 weightIndex += prevLayerSize;
                 biasIndex++;
             }
 
-            // Apply activation function to the entire layer at once using Span
+            // Do activation on whole span
             _activations[layer].Calculate(currValues);
+
             layerStart = currLayerStart;
         }
 
@@ -256,12 +291,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     public double TrainMiniBatch(double[][] inputs, double[][] targets, int batchSize, double learningRate = LearningRate)
     {
-        int total = inputs.Length;
-        double lastEpochError = 0.0;
-
-        int[] indices = [.. Enumerable.Range(0, total).OrderBy(_ => _rand.Next())];
-        double epochErrorSum = 0.0;
-
         // Reset accumulated gradients for the epoch
         for (int i = 0; i < Gradients.Length; i++)
         {
@@ -269,6 +298,9 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             GradientBiases[i].Clear();
         }
 
+        int total = inputs.Length;
+        int[] indices = [.. Enumerable.Range(0, total).OrderBy(_ => _rand.Next())];
+        double errorSum = 0;
         int batchCount = 0;
         for (int batchStart = 0; batchStart < total; batchStart += batchSize)
         {
@@ -289,7 +321,12 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             }
 
             // Accumulate gradients from this batch
-            var (batchGradients, batchBiasGradients, output) = ComputeBatchGradients(batchInputs, batchTargets);
+            var (batchGradients, batchBiasGradients, output) = ComputeBatchGradients(
+                batchInputs,
+                batchTargets,
+                _weights,
+                _biases,
+                _activations);
 
             // Accumulate gradients
             for (int l = 0; l < Gradients.Length; l++)
@@ -306,9 +343,11 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                     double outVal = output[i, j];
                     double target = batchTargets[i, j];
                     double safeOut = Math.Max(outVal, NearNullValue);
-                    epochErrorSum += target * Math.Log(safeOut);
+                    double safeTarget = Math.Max(target, NearNullValue);
+                    errorSum += safeTarget * Math.Log(safeTarget / safeOut);
                 }
             }
+
             batchCount++;
         }
 
@@ -320,20 +359,21 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
 
         UpdateWeightsAdam(learningRate);
+        //UpdateWeights();
 
         SyncMatricesToFlat();
 
-        lastEpochError = -epochErrorSum / (total * _structure[^1]);
+        double safeTotal = Math.Max((total * _structure[^1]), NearNullValue); 
+        Error = errorSum / safeTotal;
+        LastError = Error;
 
-        Error = lastEpochError;
-        LastError = lastEpochError;
-        return lastEpochError;
+        return Error;
     }
 
-    public void UpdateWeightsAdam(
-        double learningRate = LearningRate, 
-        double beta1 = 0.9, 
-        double beta2 = 0.999, 
+    private void UpdateWeightsAdam(
+        double learningRate = LearningRate,
+        double beta1 = 0.9,
+        double beta2 = 0.999,
         double epsilon = 1e-8)
     {
         _adamT++;
@@ -355,6 +395,98 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
     }
 
+    private void UpdateWeights()
+    {
+        for (int layer = 0; layer < _weights.Length; layer++)
+        {
+            var w = _weights[layer];
+            var g = Gradients[layer];
+            var prevG = _previousGradients[layer];
+            var stepMat = _updateValues[layer];
+            var lastChangeMat = _previousWeightChange[layer];
+
+            for (int r = 0; r < w.RowCount; r++)
+            {
+                for (int c = 0; c < w.ColumnCount; c++)
+                {
+                    double grad = g[r, c];
+                    double prevGrad = prevG[r, c];
+                    double step = stepMat[r, c];
+                    double lastChange = lastChangeMat[r, c];
+
+                    int sign = Math.Abs(grad * prevGrad) < NearNullValue ? 0 : Math.Sign(grad * prevGrad);
+                    double weightChange = 0.0;
+
+                    if (sign > 0)
+                    {
+                        step = Math.Min(step * VariableLearnRateBig, MaximumStepSize);
+                        weightChange = Math.Sign(grad) * step;
+                        w[r, c] += weightChange;
+                        prevG[r, c] = grad;
+                    }
+                    else if (sign < 0)
+                    {
+                        step = Math.Max(step * VariableLearnRateSmall, MinimumStepSize);
+                        // revert last change
+                        w[r, c] -= lastChange;
+                        prevG[r, c] = 0.0;
+                    }
+                    else
+                    {
+                        weightChange = Math.Sign(grad) * step;
+                        w[r, c] += weightChange;
+                        prevG[r, c] = grad;
+                    }
+
+                    stepMat[r, c] = step;
+                    lastChangeMat[r, c] = weightChange;
+                }
+            }
+
+            // Biases for this layer
+            var b = _biases[layer];
+            var gb = GradientBiases[layer];
+            var prevGb = _previousBiasGradients[layer];
+            var stepB = _updateBiasesValues[layer];
+            var lastChangeB = _previousBiasesChange[layer];
+
+            for (int i = 0; i < b.Count; i++)
+            {
+                double grad = gb[i];
+                double prevGrad = prevGb[i];
+                double step = stepB[i];
+                double lastChange = lastChangeB[i];
+
+                int sign = Math.Abs(grad * prevGrad) < NearNullValue ? 0 : Math.Sign(grad * prevGrad);
+                double biasChange = 0.0;
+
+                if (sign > 0)
+                {
+                    step = Math.Min(step * VariableLearnRateBig, MaximumStepSize);
+                    biasChange = Math.Sign(grad) * step;
+                    b[i] += biasChange;
+                    prevGb[i] = grad;
+                }
+                else if (sign < 0)
+                {
+                    step = Math.Max(step * VariableLearnRateSmall, MinimumStepSize);
+                    // revert last change
+                    b[i] -= lastChange;
+                    prevGb[i] = 0.0;
+                }
+                else
+                {
+                    biasChange = Math.Sign(grad) * step;
+                    b[i] += biasChange;
+                    prevGb[i] = grad;
+                }
+
+                stepB[i] = step;
+                lastChangeB[i] = biasChange;
+            }
+        }
+    }
+
     private static void ApplyActivation(Matrix<double> values, IActivationFunction activationFunction)
     {
         for (int i = 0; i < values.RowCount; i++)
@@ -371,6 +503,62 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 values[i, j] = tempRow[j];
             }
         }
+    }
+
+    private static (Matrix<double>[] gradients, Vector<double>[] biasGradients, Matrix<double> output) ComputeBatchGradients(
+        Matrix<double> batchInputs,
+        Matrix<double> batchTargets,
+        Matrix<double>[] weights,
+        Vector<double>[] biases,
+        IActivationFunction[] activationFunctions)
+    {
+        int layers = weights.Length;
+        Matrix<double>[] values = new Matrix<double>[layers + 1];
+        Matrix<double>[] tempValues = new Matrix<double>[layers];
+        values[0] = batchInputs;
+
+        // Forward pass
+        for (int l = 0; l < layers; l++)
+        {
+            tempValues[l] = values[l] * weights[l].Transpose();
+            tempValues[l] = tempValues[l] + VectorToRowMatrix(biases[l], tempValues[l].RowCount);
+            values[l + 1] = tempValues[l].Clone();
+            ApplyActivation(values[l + 1], activationFunctions[l + 1]);
+        }
+
+        Matrix<double> output = values[^1].Clone();
+
+        // Backward pass
+        Matrix<double>[] deltas = new Matrix<double>[layers];
+        deltas[^1] = Matrix<double>.Build.Dense(output.RowCount, output.ColumnCount);
+        for (int i = 0; i < output.RowCount; i++)
+        {
+            for (int j = 0; j < output.ColumnCount; j++)
+            {
+                double p = batchTargets[i, j];
+                double q = Math.Max(output[i, j], NearNullValue);
+                deltas[^1][i, j] = -p / q;
+            }
+        }
+        MultiplyByDerivative(deltas[^1], values[^1], activationFunctions[^1]);
+
+        for (int l = layers - 2; l >= 0; l--)
+        {
+            deltas[l] = deltas[l + 1] * weights[l + 1];
+            MultiplyByDerivative(deltas[l], values[l + 1], activationFunctions[l + 1]);
+        }
+
+        // Compute gradients
+        Matrix<double>[] gradients = new Matrix<double>[layers];
+        Vector<double>[] biasGradients = new Vector<double>[layers];
+
+        for (int l = 0; l < layers; l++)
+        {
+            gradients[l] = values[l].TransposeThisAndMultiply(deltas[l]).Transpose() / batchInputs.RowCount;
+            biasGradients[l] = deltas[l].ColumnSums() / batchInputs.RowCount;
+        }
+
+        return (gradients, biasGradients, output);
     }
 
     private static double DotProduct(ReadOnlySpan<double> values, ReadOnlySpan<double> weights)
@@ -428,53 +616,11 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         return matrix;
     }
 
-    private (Matrix<double>[] gradients, Vector<double>[] biasGradients, Matrix<double> output) ComputeBatchGradients(Matrix<double> batchInputs, Matrix<double> batchTargets)
-    {
-        int layers = _weights.Length;
-        Matrix<double>[] values = new Matrix<double>[layers + 1];
-        Matrix<double>[] tempValues = new Matrix<double>[layers];
-        values[0] = batchInputs;
-
-        // Forward pass
-        for (int l = 0; l < layers; l++)
-        {
-            tempValues[l] = values[l] * _weights[l].Transpose();
-            tempValues[l] = tempValues[l] + VectorToRowMatrix(_biases[l], tempValues[l].RowCount);
-            values[l + 1] = tempValues[l].Clone();
-            ApplyActivation(values[l + 1], _activations[l + 1]);
-        }
-
-        Matrix<double> output = values[^1].Clone();
-
-        // Backward pass
-        Matrix<double>[] deltas = new Matrix<double>[layers];
-        deltas[^1] = values[^1] - batchTargets;
-        MultiplyByDerivative(deltas[^1], values[^1], _activations[^1]);
-
-        for (int l = layers - 2; l >= 0; l--)
-        {
-            deltas[l] = deltas[l + 1] * _weights[l + 1];
-            MultiplyByDerivative(deltas[l], values[l + 1], _activations[l + 1]);
-        }
-
-        // Compute gradients
-        Matrix<double>[] gradients = new Matrix<double>[layers];
-        Vector<double>[] biasGradients = new Vector<double>[layers];
-
-        for (int l = 0; l < layers; l++)
-        {
-            gradients[l] = values[l].TransposeThisAndMultiply(deltas[l]).Transpose() / batchInputs.RowCount;
-            biasGradients[l] = deltas[l].ColumnSums() / batchInputs.RowCount;
-        }
-
-        return (gradients, biasGradients, output);
-    }
-
-    private void InitBiases(Vector<double> biases)
+    private static void InitBiases(Vector<double> biases, Random random)
     {
         for (int i = 0; i < biases.Count; i++)
         {
-            biases[i] = _rand.NextDouble() - 0.5;
+            biases[i] = random.NextDouble() - 0.5;
         }
     }
 
@@ -517,7 +663,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
     }
 
-    private void InitWeights(Matrix<double> weights, int inputSize, int outputSize)
+    private static void InitWeights(Matrix<double> weights, int inputSize, int outputSize, Random random)
     {
         double beta = 0.7 * Math.Pow(outputSize, 1.0 / inputSize);
         for (int i = 0; i < outputSize; i++)
@@ -525,7 +671,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             double norm = 0.0;
             for (int j = 0; j < inputSize; j++)
             {
-                weights[i, j] = _rand.NextDouble() - 0.5;
+                weights[i, j] = random.NextDouble() - 0.5;
                 norm += weights[i, j] * weights[i, j];
             }
 

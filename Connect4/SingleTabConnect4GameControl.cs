@@ -11,7 +11,7 @@ namespace Connect4
         private readonly PictureBox _pictureBox;
         private readonly Button _resetButton;
         private readonly Button _undoButton;
-        private readonly Stack<string> _moveHistory = new(); // Store board states for undo
+        private readonly Stack<string> _moveHistory = new(); 
 
         public SingleTabConnect4GameControl(Mcts mcts)
         {
@@ -73,8 +73,8 @@ namespace Connect4
 
         private void PictureBox_Click(object? sender, EventArgs e)
         {
-            // Save current state before move for undo
             _moveHistory.Push(BitKey.ToKey( _game.GameBoard.StateToArray()));
+
             var clickEvent = e as MouseEventArgs;
             int winner = PlacePieceClick(_game, clickEvent, _pictureBox);
 
