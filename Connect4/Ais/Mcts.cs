@@ -11,30 +11,16 @@ public class Mcts(
     Random? random = null)
 {
     private const int MaxColumnCount = 7;
+    private const double MinimumPolicyValue = 0.001;
     private readonly int _maxIterations = maxIterations;
     private readonly Random _random = random ?? new();
     private readonly TelemetryHistory _telemetryHistory = new();
-    private const double MinimumPolicyValue = 0.01;
     private Node? _rootNode;
 
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
     public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
 
-    private Node FindRootNode(GameBoard gameBoard, int previousPlayer)
-    {
-        List<Node> children = _rootNode?.Children ?? [];
-        foreach (var childNode in children)
-        {
-            if (childNode.GameBoard.StateToString() == gameBoard.StateToString())
-            {
-                return childNode;
-            }
-        }
-
-        return new Node(gameBoard.Copy(), previousPlayer);
-    }
-
-    public Task<int> GetBestMove(GameBoard gameBoard, int previousPlayer)
+    public Task<int> GetBestMove(GameBoard gameBoard, int previousPlayer, double explorationFactor)
     {
         var rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
@@ -44,13 +30,13 @@ public class Mcts(
         //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
         {
             Node? childNode = useNetworks
-                ? Select(rootNode, _random, PolicyNetwork!)
-                : Select(rootNode, _random);
+                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor)
+                : Select(rootNode, _random, explorationFactor);
 
             double result = useNetworks
                 ? Simulate(childNode, ValueNetwork!)
                 : Simulate(childNode, _random);
-            
+
             Backpropagate(childNode, result);
         }
         stopwatch.Stop();
@@ -82,7 +68,7 @@ public class Mcts(
         {
             currentNode.Update(result);
             //flip the result for the next parent node to indicate the other player's perspective
-            result *= -1; 
+            result *= -1;
 
             currentNode = currentNode.Parent;
         }
@@ -185,7 +171,7 @@ public class Mcts(
         return previousPlayer == 1 ? 1 : 0;
     }
 
-    private static Node Select(Node node, Random random)
+    private static Node Select(Node node, Random random, double explorationFactor)
     {
         if (node.IsTerminal)
         {
@@ -197,16 +183,16 @@ public class Mcts(
             return Expand(node, random);
         }
 
-        Node? bestChild = node.GetBestChild();
+        Node? bestChild = node.GetBestChild(explorationFactor);
         while (bestChild is not null && bestChild.Visits > 0 && !bestChild.IsTerminal)
         {
-            bestChild = Select(bestChild, random);
+            bestChild = Select(bestChild, random, explorationFactor);
         }
 
         return bestChild ?? node;
     }
 
-    private static Node Select(Node node, Random random, IStandardNetwork policyNetwork)
+    private static Node Select(Node node, Random random, IStandardNetwork policyNetwork, double explorationFactor)
     {
         if (node.IsTerminal)
         {
@@ -218,10 +204,10 @@ public class Mcts(
             return Expand(node, random);
         }
 
-        Node? bestChild = node.GetBestChild(policyNetwork, random);
+        Node? bestChild = node.GetBestChild(policyNetwork, explorationFactor);
         while (bestChild is not null && bestChild.Visits > 0 && !bestChild.IsTerminal)
         {
-            bestChild = Select(bestChild, random, policyNetwork);
+            bestChild = Select(bestChild, random, policyNetwork, explorationFactor);
         }
 
         return bestChild ?? node;
@@ -252,5 +238,19 @@ public class Mcts(
         }
 
         telemetryHistory.StoreTempData(root.GameBoard, policy);
+    }
+
+    private Node FindRootNode(GameBoard gameBoard, int previousPlayer)
+    {
+        List<Node> children = _rootNode?.Children ?? [];
+        foreach (var childNode in children)
+        {
+            if (childNode.GameBoard.StateToString() == gameBoard.StateToString())
+            {
+                return childNode;
+            }
+        }
+
+        return new Node(gameBoard.Copy(), previousPlayer);
     }
 }

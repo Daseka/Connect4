@@ -1,6 +1,7 @@
 ﻿using Connect4.Ais;
 using Connect4.GameParts;
 using DeepNetwork;
+using DeepNetwork.NetworkIO;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
@@ -9,19 +10,25 @@ namespace Connect4;
 public partial class Form1 : Form
 {
     private const int ArenaIterations = 300;
-    private const int DeepLearningThreshold = 51;
-    private const double MaximumError = 0.10;
-    private const int McstIterations = 1600;
+    private const int BossLifeMaximum = 3;
+    private const int BossWinStreakMaximum = 5;
+    private const int DeepLearningThreshold = 55;
+    private const double ExplorationConstantMaximum = 5.40;
+    private const double ExplorationConstantMinimum = 1.40;
+    private const int McstIterations = 400;
     private const int MinimumGameCount = 4;
     private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
     private const string OldValueNetwork = "telemetry\\old_value_network.json";
     private const int SelfPlayGames = 100;
     private const int TelemetryHistorySaturation = 1000;
     private const int TrainingDataCount = 1000;
+    private const string Unknown = "Random";
+    private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
     private readonly TelemetryHistory _telemetryHistory = new();
     private readonly List<double> _yellowPercentHistory = [];
+    private Agent? _currentAgent;
     private double _drawPercent;
     private double _redPercent;
     private double _redWithDrawPercent;
@@ -29,53 +36,87 @@ public partial class Form1 : Form
 
     private async Task BattleArena()
     {
-        int bossLives = 3;
+        int bossLives = BossLifeMaximum;
+        int bossWinStreak = 0;
         bool skipTraining = false;
-        double maximumError = MaximumError;
-
+        double explorationFactor = ExplorationConstantMaximum;
         int i = 0;
-        while (i < ArenaIterations && !_arenaCancelationToken.IsCancellationRequested)
+        while (i < ArenaIterations && !_arenaCancelationSource.IsCancellationRequested)
         {
             i++;
 
-            // play atleast approximitly 10k games to have enough data
+            // play a minimum amont of games to have enough data
             int initialGames = _telemetryHistory.Count < TelemetryHistorySaturation
                 ? TelemetryHistorySaturation / 10
                 : 0;
-            await SelfPlayParallelAsync(McstIterations, initialGames);
+            await SelfPlayParallelAsync(McstIterations, explorationFactor, initialGames);
 
             if (_redWithDrawPercent >= DeepLearningThreshold)
             {
+                // Boss has lost reset win streak and decrease exploration factor
+                bossWinStreak = 0;
+
                 if (bossLives <= 1)
                 {
+                    //Create an agent based on the victorious Red
+                    IStandardNetwork valueNetwork = _redMcts.ValueNetwork?.Clone()!;
+                    valueNetwork.ExplorationFactor = explorationFactor;
+                    IStandardNetwork policyNetwork = _redMcts.PolicyNetwork?.Clone()!;
+                    policyNetwork.ExplorationFactor = explorationFactor;
+
+                    _currentAgent = new Agent
+                    {
+                        Id = Guid.NewGuid().ToString()[..8],
+                        ValueNetwork = valueNetwork,
+                        PolicyNetwork = policyNetwork,
+                        Created = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                        FirstKill = _currentAgent?.Id ?? Unknown,
+                        Generation = _currentAgent?.Generation + 1 ?? 1,
+                        ExplorationFactor = explorationFactor
+                    };
+
+                    _agentCatalog.Add(_currentAgent);
+
+                    _yellowMcts = new Mcts(McstIterations, _currentAgent.ValueNetwork, _currentAgent.PolicyNetwork);
+                    
+                    explorationFactor = ExplorationConstantMinimum;
                     bossLives = 3;
 
-                    //Only save the networks if Red has a win rate above deep learning threshold
-                    NetworkSaver.SaveNetwork(_redMcts.ValueNetwork, OldValueNetwork);
-                    NetworkSaver.SaveNetwork(_redMcts.PolicyNetwork, OldPolicyNetwork);
-
-                    // Load the higher win rate networks for Yellow
-                    _oldValueNetwork = NetworkLoader.LoadNetwork(OldValueNetwork) ?? _oldValueNetwork;
-                    _oldPolicyNetwork = NetworkLoader.LoadNetwork(OldPolicyNetwork) ?? _oldPolicyNetwork;
-
-                    _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
-
-                    _ = BeginInvoke(() => toolStripStatusLabel1.Text = "Boss Dead: Yellow has new network");
+                    _ = BeginInvoke(() => 
+                    { 
+                        _ = listBox1.Items.Add("Boss Dead: Yellow has new network");
+                        listBox1.TopIndex = listBox1.Items.Count - 1;
+                    });
                 }
                 else
                 {
                     skipTraining = true;
                     bossLives--;
-                    _ = BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: Reduced boss life skipping training");
+                    _ = BeginInvoke(() =>
+                    {
+                        _ = listBox1.Items.Add($"Boss Lives {bossLives}: Reduced boss life skipping training");
+                        listBox1.TopIndex = listBox1.Items.Count - 1;
+                    });
                 }
             }
             else
             {
-                bossLives += bossLives < 3 ? 1 : 0;
-                _ = BeginInvoke(() => toolStripStatusLabel1.Text = $"Boss Lives {bossLives}: boss unfased need more training");
+                bossWinStreak++;
+                if (bossWinStreak >= BossWinStreakMaximum)
+                {
+                    bossWinStreak = 0;
+                    explorationFactor = Math.Min(ExplorationConstantMaximum, explorationFactor + 1);
+                }
+
+                bossLives += bossLives < BossLifeMaximum ? 1 : 0;
+                _ = BeginInvoke(() =>
+                { 
+                    _ = listBox1.Items.Add($"Boss Lives {bossLives}: boss unfased need more training");
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
             }
 
-            if (_arenaCancelationToken.IsCancellationRequested)
+            if (_arenaCancelationSource.IsCancellationRequested)
             {
                 _ = BeginInvoke(() => toolStripStatusLabel1.Text = "Battle Arena cancelled.");
                 return;
@@ -83,17 +124,24 @@ public partial class Form1 : Form
 
             if (!skipTraining)
             {
-                _ = await TrainAsync(_redMcts, maximumError);
+                _ = await TrainAsync(_redMcts);
+
+                _ = BeginInvoke(() =>
+                {
+                    _ = listBox1.Items.Add($"Boss lives: {bossLives} \t Boss win streak {bossWinStreak}");
+                    _ = listBox1.Items.Add($"Exploration factor {explorationFactor:F2}");
+                    
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
             }
 
             skipTraining = false;
         }
     }
 
-    private async Task SelfPlayParallelAsync(int mcstIterations, int initialGames = 0)
+    private async Task SelfPlayParallelAsync(int mcstIterations, double explorationFactor, int initialGames = 0)
     {
-        _cancellationTokenSource = new CancellationTokenSource();
-        CancellationToken cancellationToken = _cancellationTokenSource.Token;
+        CancellationToken cancellationToken = _arenaCancelationSource.Token;
 
         int processorCount = Environment.ProcessorCount;
         int parallelGames = Math.Max(2, processorCount - 1);
@@ -159,7 +207,19 @@ public partial class Form1 : Form
                                 ? redMcts
                                 : yellowMcts;
 
-                            int move = await mcts.GetBestMove(game.GameBoard, (int)game.GameBoard.LastPlayed);
+                            double factor;
+                            if (game.CurrentPlayer == (int)Player.Red)
+                            {
+                                factor = (double)explorationFactor;
+                            }
+                            else
+                            {
+                                factor = mcts.ValueNetwork?.ExplorationFactor > 0
+                                    ? (double)mcts.ValueNetwork?.ExplorationFactor!
+                                    : explorationFactor;
+                            }
+
+                            int move = await mcts.GetBestMove(game.GameBoard, (int)game.GameBoard.LastPlayed, factor);
 
                             if (move == -1)
                             {
@@ -251,7 +311,7 @@ public partial class Form1 : Form
         });
     }
 
-    private Task<(int runs, double error)> TrainAsync(Mcts mcts, double maximumError = MaximumError)
+    private Task<(int runs, double error)> TrainAsync(Mcts mcts)
     {
         Invoke(listBox1.Items.Clear);
 
@@ -270,29 +330,34 @@ public partial class Form1 : Form
         (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
             .GetTrainingData(TrainingDataCount, MinimumGameCount);
 
+        double previousError = double.MaxValue;
+        double previousError2 = double.MaxValue;
         for (int i = 0; i < steps; i++)
         {
             double error = valueTrainer.Train(trainingData, valueExpectedData);
+            double error2 = policyTrainer.Train(trainingData, policyExpectedData);
+
+            string arrow = error > previousError ? "🡹" : "🡻";
+            string arrow2 = error2 > previousError2 ? "🡹" : "🡻";
+
             Invoke(() =>
             {
-                _ = listBox1.Items.Add($"V:Error {Math.Round(error, 8):F8}");
+                _ = listBox1.Items.Add($"V:Error {Math.Round(error, 8):F8} {arrow} \t P:Error {Math.Round(error2, 8):F8} {arrow2}\t Step {i}");
                 listBox1.TopIndex = listBox1.Items.Count - 1;
             });
 
-            double error2 = policyTrainer.Train(trainingData, policyExpectedData);
-            Invoke(() =>
-            {
-                _ = listBox1.Items.Add($"P:Error {Math.Round(error2, 8):F8}");
-                listBox1.TopIndex = listBox1.Items.Count - 1;
-            });
+            previousError = error;
+            previousError2 = error2;
         }
 
         stopwatch.Stop();
 
-        string x = $"Training value completed in {stopwatch.ElapsedMilliseconds} ms";
+        string x = $"Training on {trainingData.Length} items completed in {stopwatch.ElapsedMilliseconds} ms";
+        string y = $"Current agent is {_currentAgent?.Id ?? "None"} generation: {_currentAgent?.Generation ?? 0}";
         Invoke(() =>
         {
             _ = listBox1.Items.Add(x);
+            _ = listBox1.Items.Add(y);
             listBox1.TopIndex = listBox1.Items.Count - 1;
         });
 

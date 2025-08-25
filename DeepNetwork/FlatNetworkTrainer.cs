@@ -41,7 +41,7 @@ public class FlatNetworkTrainer : INetworkTrainer
             Array.Copy(trainingInputs, start, inputsPart, 0, count);
             Array.Copy(trainingOutputs, start, outputsPart, 0, count);
 
-            FlatDumbNetwork clone = _network.Clone();
+            FlatDumbNetwork clone = (_network.Clone() as FlatDumbNetwork)!;
             (gradientsPerThread[t], gradientBiasesPerThread[t], errors[t]) = clone
                 .ComputeGradientsAndError(inputsPart, outputsPart);
         });

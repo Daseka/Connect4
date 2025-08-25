@@ -1,11 +1,12 @@
-﻿using Newtonsoft.Json;
+﻿using DeepNetwork.ActivationFunctions;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections.Concurrent;
 using System.Numerics;
 
 namespace DeepNetwork;
 
-public class FlatDumbNetwork: IStandardNetwork
+public class FlatDumbNetwork : IStandardNetwork
 {
     public IActivationFunction[] ActivationFunctions;
     public double[] Biases;
@@ -16,33 +17,33 @@ public class FlatDumbNetwork: IStandardNetwork
 
     private const int CacheSize = 500000;
     private const double Lambda = 0.02;
+    private const double LearningRate = 0.0001;
     private const int MaximumStepSize = 50;
     private const double MinimumStepSize = 1e-6d;
     private const double NearNullValue = 1e-11d;
     private const double VariableLearnRateBig = 1.2d;
     private const double VariableLearnRateSmall = 0.5d;
-    private const double LearningRate = 0.0001;
     private readonly double[] _adamM;
     private readonly double[] _adamMBias;
     private readonly double[] _adamV;
     private readonly double[] _adamVBias;
+    private readonly ConcurrentDictionary<string, double[]> _cachedValues = new();
+    private readonly ConcurrentQueue<string> _cacheKeys = new();
+    private readonly double[] _deltaValues;
+    private readonly double[] _previousBiases;
+    private readonly double[] _previousBiasesChange;
+    private readonly double[] _previousGradients;
+    private readonly double[] _previousWeightChange;
+    private readonly double[] _updateBiasesValues;
+    private readonly double[] _updateValues;
+    private readonly double[] _values;
     private int _adamT;
 
-    private ConcurrentDictionary<string, double[]> _cachedValues = new();
-    private ConcurrentQueue<string> _cacheKeys = new();
-    private double[] _deltaValues;
-    private double[] _previousBiases;
-    private double[] _previousBiasesChange;
-    private double[] _previousGradients;
-    private double[] _previousWeightChange;
-    private double[] _updateBiasesValues;
-    private double[] _updateValues;
-    private double[] _values;
-
+    public static string NetworkName { get; } = nameof(FlatDumbNetwork);
     public double Error { get; set; }
+    public double ExplorationFactor { get; set; }
     public double LastError { get; set; }
     public bool Trained { get; set; }
-    public static string NetworkName { get; } = nameof(FlatDumbNetwork);
 
     public FlatDumbNetwork(IReadOnlyList<int> structure)
     {
@@ -136,7 +137,7 @@ public class FlatDumbNetwork: IStandardNetwork
         var jObject = JObject.Parse(json);
 
         //Check if the file is for this network type
-        var name = jObject[nameof(NetworkName)]?.ToObject<string>()!;
+        string name = jObject[nameof(NetworkName)]?.ToObject<string>()!;
         if (name?.Equals(NetworkName) != true)
         {
             return null;
@@ -181,12 +182,12 @@ public class FlatDumbNetwork: IStandardNetwork
             int currLayerSize = Structure[layer];
             int currLayerStart = layerStart + prevLayerSize;
 
-            var prevValues = _values.AsSpan(layerStart, prevLayerSize);
-            var currValues = _values.AsSpan(currLayerStart, currLayerSize);
+            Span<double> prevValues = _values.AsSpan(layerStart, prevLayerSize);
+            Span<double> currValues = _values.AsSpan(currLayerStart, currLayerSize);
 
             for (int node = 0; node < currLayerSize; node++)
             {
-                var weights = Weights.AsSpan(weightIndex, prevLayerSize);
+                Span<double> weights = Weights.AsSpan(weightIndex, prevLayerSize);
                 double weightedSum = DotProduct(prevValues, weights) + Biases[biasIndex];
                 //currValues[node] = weightedSum;
                 currValues[node] = ActivationFunctions[layer].Calculate(weightedSum);
@@ -217,7 +218,7 @@ public class FlatDumbNetwork: IStandardNetwork
         {
             if (_cacheKeys.TryDequeue(out string? oldestKey))
             {
-                _cachedValues.TryRemove(oldestKey, out _);
+                _ = _cachedValues.TryRemove(oldestKey, out _);
             }
         }
 
@@ -230,7 +231,7 @@ public class FlatDumbNetwork: IStandardNetwork
         _cacheKeys.Clear();
     }
 
-    public FlatDumbNetwork Clone()
+    public IStandardNetwork Clone()
     {
         var clone = new FlatDumbNetwork(Structure)
         {
@@ -240,7 +241,6 @@ public class FlatDumbNetwork: IStandardNetwork
             Weights = (double[])Weights.Clone(),
             Structure = (int[])Structure.Clone(),
             Biases = (double[])Biases.Clone(),
-            
         };
 
         return clone;
@@ -412,7 +412,7 @@ public class FlatDumbNetwork: IStandardNetwork
     }
 
     private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorNormal(
-        double[][] trainingInputs, 
+        double[][] trainingInputs,
         double[][] trainingOutputs)
     {
         Array.Clear(Gradients, 0, Gradients.Length);
@@ -431,7 +431,7 @@ public class FlatDumbNetwork: IStandardNetwork
         for (int sample = 0; sample < trainingInputs.Length; sample++)
         {
             // Forward pass
-            double[] _ = Calculate(trainingInputs[sample]);
+            _ = Calculate(trainingInputs[sample]);
 
             // Compute output layer deltas
             int lastLayer = numLayers - 1;
@@ -470,6 +470,7 @@ public class FlatDumbNetwork: IStandardNetwork
                         int wIdx = weightBase + currLayerSize * nextNode + node;
                         sum += Weights[wIdx] * _deltaValues[nextLayerStart + nextNode];
                     }
+
                     double val = _values[layerStart + node];
                     _deltaValues[layerStart + node] = sum * ActivationFunctions[layer].Derivative(val);
                 }
@@ -479,8 +480,9 @@ public class FlatDumbNetwork: IStandardNetwork
             int weightIndex = 0;
             for (int layer = 1; layer < numLayers; layer++)
             {
-                int prevLayerStart = layerOffsets[layer - 1];
-                int currLayerStart = layerOffsets[layer];
+                _ = layerOffsets[layer - 1];
+
+                _ = layerOffsets[layer];
                 int prevLayerSize = Structure[layer - 1];
                 int currLayerSize = Structure[layer];
 
@@ -518,7 +520,7 @@ public class FlatDumbNetwork: IStandardNetwork
 
     // Alternate version for softmax output layer
     private (double[] gradients, double[] biases, double error) ComputeGradientsAndErrorSoftmax(
-        double[][] trainingInputs, 
+        double[][] trainingInputs,
         double[][] trainingOutputs)
     {
         Array.Clear(Gradients, 0, Gradients.Length);
@@ -579,6 +581,7 @@ public class FlatDumbNetwork: IStandardNetwork
                         int wIdx = weightBase + currLayerSize * nextNode + node;
                         sum += Weights[wIdx] * _deltaValues[nextLayerStart + nextNode];
                     }
+
                     double val = _values[layerStart + node];
                     _deltaValues[layerStart + node] = sum * ActivationFunctions[layer].Derivative(val);
                 }

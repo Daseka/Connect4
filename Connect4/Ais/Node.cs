@@ -4,8 +4,7 @@ using DeepNetwork;
 namespace Connect4.Ais;
 public class Node
 {
-    private const double ExplorationConstant =0.8;
-    //private const double ExplorationConstant = 3.41;
+    //private const double ExplorationConstant =0.8;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
@@ -40,7 +39,7 @@ public class Node
         PlayerToPlay = parent?.PlayerToPlay == 1 ? 2 : 1;
     }
 
-    public Node? GetBestChild()
+    public Node? GetBestChild(double explorationFactor)
     {
         double currentMaxUcb = double.MinValue;
         Node? bestChild = null;
@@ -49,7 +48,7 @@ public class Node
         {
             node.Ucb = node.Visits == 0
                 ? double.MaxValue
-                : node.Wins / node.Visits + ExplorationConstant * Math.Sqrt(Math.Log(node.Parent?.Visits ?? 1) / node.Visits);
+                : node.Wins / node.Visits + explorationFactor * Math.Sqrt(Math.Log(node.Parent?.Visits ?? 1) / node.Visits);
 
             if (node.Ucb > currentMaxUcb)
             {
@@ -61,7 +60,7 @@ public class Node
         return bestChild;
     }
 
-    public Node? GetBestChild(IStandardNetwork policyNetwork, Random random)
+    public Node? GetBestChild(IStandardNetwork policyNetwork, double explorationFactor)
     {
         double currentMaxUcb = double.MinValue;
         Node? bestChild = null;
@@ -79,7 +78,7 @@ public class Node
         {
             double parentVisit = node.Parent?.Visits == 0 ? 1 : node.Parent?.Visits ?? 1;
             node.Ucb = node.Wins / (node.Visits == 0 ? 1 : node.Visits)
-                + ExplorationConstant * policyProbability[node.Move] * Math.Sqrt(parentVisit / (1 + node.Visits));
+                + explorationFactor * policyProbability[node.Move] * Math.Sqrt(parentVisit / (1 + node.Visits));
 
             if (node.Ucb > currentMaxUcb)
             {
@@ -106,7 +105,7 @@ public class Node
         foreach (Node node in Children)
         {
             double value = node.Visits == 0 ? 0 : node.Wins / node.Visits;
-            if (value >= currentMaxValue || (value == currentMaxValue && node.Visits < currentMinVisits))
+            if (value > currentMaxValue || (value == currentMaxValue && node.Visits < currentMinVisits))
             {
                 currentMinVisits = node.Visits;
                 currentMaxValue = value;

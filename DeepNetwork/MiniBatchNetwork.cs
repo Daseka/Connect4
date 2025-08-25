@@ -1,3 +1,4 @@
+using DeepNetwork.ActivationFunctions;
 using MathNet.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
@@ -12,29 +13,23 @@ namespace DeepNetwork;
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
     private const int CacheSize = 500000;
-    private const double Lambda = 0.02;
-    private const double LearningRate = 0.00001;
+    private const double LearningRate = 0.0001;
     private const double NearNullValue = 1e-11d;
-    private const int MaximumStepSize = 50;
-    private const double MinimumStepSize = 1e-6d;
-    private const double VariableLearnRateBig = 0.000012d;
-    private const double VariableLearnRateSmall = 0.000005d;
+
     private readonly IActivationFunction[] _activations;
-    private readonly ConcurrentDictionary<string, double[]> _cachedValues = new();
-    private readonly ConcurrentQueue<string> _cacheKeys = new();
-    private readonly Random _rand = new();
-    private readonly int[] _structure;
 
     // Adam optimizer state
-    private Matrix<double>[] _adamM;
+    private readonly Matrix<double>[] _adamM;
 
-    private Vector<double>[] _adamMBias;
+    private readonly Vector<double>[] _adamMBias;
+    private readonly Matrix<double>[] _adamV;
+    private readonly Vector<double>[] _adamVBias;
+    private readonly ConcurrentDictionary<string, double[]> _cachedValues = new();
+    private readonly ConcurrentQueue<string> _cacheKeys = new();
 
+    private readonly Random _rand = new();
+    private readonly int[] _structure;
     private int _adamT;
-
-    private Matrix<double>[] _adamV;
-
-    private Vector<double>[] _adamVBias;
 
     // Matrix/Vector representations for batch training
     private Vector<double>[] _biases;
@@ -43,24 +38,17 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     private double[] _flatBiases;
 
-    // Flat arrays for ultra-fast single inference (like FlatDumbNetwork)
+    // Flat arrays for ultra-fast foward pass
     private double[] _flatWeights;
 
     private int[] _layerOffsets;
     private double[] _values;
     private int[] _weightOffsets;
+
     private Matrix<double>[] _weights;
-
-    // RPROP-like optimizer state (per-parameter step sizes and history)
-    private Matrix<double>[] _previousGradients;
-    private Matrix<double>[] _previousWeightChange;
-    private Matrix<double>[] _updateValues;
-    private Vector<double>[] _previousBiasGradients;
-    private Vector<double>[] _previousBiasesChange;
-    private Vector<double>[] _updateBiasesValues;
-
     public static string NetworkName { get; } = nameof(MiniBatchMatrixNetwork);
     public double Error { get; set; }
+    public double ExplorationFactor { get; set; }
     public Vector<double>[] GradientBiases { get; private set; }
     public Matrix<double>[] Gradients { get; private set; }
     public double LastError { get; set; }
@@ -92,14 +80,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         GradientBiases = new Vector<double>[layers];
         _adamT = 0;
 
-        // RPROP-like state
-        _previousGradients = new Matrix<double>[layers];
-        _previousWeightChange = new Matrix<double>[layers];
-        _updateValues = new Matrix<double>[layers];
-        _previousBiasGradients = new Vector<double>[layers];
-        _previousBiasesChange = new Vector<double>[layers];
-        _updateBiasesValues = new Vector<double>[layers];
-
         for (int i = 0; i < layers; i++)
         {
             _weights[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
@@ -110,14 +90,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             _adamVBias[i] = Vector<double>.Build.Dense(structure[i + 1]);
             Gradients[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
             GradientBiases[i] = Vector<double>.Build.Dense(structure[i + 1]);
-
-            // RPROP-like state init
-            _previousGradients[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
-            _previousWeightChange[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i]);
-            _updateValues[i] = Matrix<double>.Build.Dense(structure[i + 1], structure[i], 0.001);
-            _previousBiasGradients[i] = Vector<double>.Build.Dense(structure[i + 1]);
-            _previousBiasesChange[i] = Vector<double>.Build.Dense(structure[i + 1]);
-            _updateBiasesValues[i] = Vector<double>.Build.Dense(structure[i + 1], 0.001);
 
             InitWeights(_weights[i], structure[i], structure[i + 1], _rand);
             InitBiases(_biases[i], _rand);
@@ -132,7 +104,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 //? new SigmoidActivationFunction()
                 ? new SoftMaxActivationFunction()
                 : new TanhActivationFunction());
-                //: new LeakyReLUActivationFunction());
+            //: new LeakyReLUActivationFunction());
         }
     }
 
@@ -147,7 +119,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         var jObject = JObject.Parse(json);
 
         //Check if the file is for this network type
-        var name = jObject[nameof(NetworkName)]?.ToObject<string>()!;
+        string name = jObject[nameof(NetworkName)]?.ToObject<string>()!;
         if (name?.Equals(NetworkName) != true)
         {
             return null;
@@ -199,13 +171,13 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             int currLayerSize = _structure[layer];
             int currLayerStart = layerStart + prevLayerSize;
 
-            var prevValues = _values.AsSpan(layerStart, prevLayerSize);
-            var currValues = _values.AsSpan(currLayerStart, currLayerSize);
+            Span<double> prevValues = _values.AsSpan(layerStart, prevLayerSize);
+            Span<double> currValues = _values.AsSpan(currLayerStart, currLayerSize);
 
             // Compute weighted sums for the current layer
             for (int node = 0; node < currLayerSize; node++)
             {
-                var weights = _flatWeights.AsSpan(weightIndex, prevLayerSize);
+                Span<double> weights = _flatWeights.AsSpan(weightIndex, prevLayerSize);
                 double weightedSum = DotProduct(prevValues, weights) + _flatBiases[biasIndex];
                 currValues[node] = weightedSum;
                 weightIndex += prevLayerSize;
@@ -237,7 +209,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         {
             if (_cacheKeys.TryDequeue(out string? oldestKey))
             {
-                _cachedValues.TryRemove(oldestKey, out _);
+                _ = _cachedValues.TryRemove(oldestKey, out _);
             }
         }
 
@@ -250,7 +222,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         _cacheKeys.Clear();
     }
 
-    public MiniBatchMatrixNetwork Clone()
+    public IStandardNetwork Clone()
     {
         var clone = new MiniBatchMatrixNetwork(_structure);
         for (int i = 0; i < _weights.Length; i++)
@@ -258,10 +230,12 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             clone._weights[i] = _weights[i].Clone();
             clone._biases[i] = _biases[i].Clone();
         }
+
         clone.SyncMatricesToFlat();
         clone.Trained = Trained;
         clone.Error = Error;
         clone.LastError = LastError;
+
         return clone;
     }
 
@@ -302,11 +276,12 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         int[] indices = [.. Enumerable.Range(0, total).OrderBy(_ => _rand.Next())];
         double errorSum = 0;
         int batchCount = 0;
+
         for (int batchStart = 0; batchStart < total; batchStart += batchSize)
         {
             int actualBatchSize = Math.Min(batchSize, total - batchStart);
-            var batchInputs = Matrix<double>.Build.Dense(actualBatchSize, _structure[0]);
-            var batchTargets = Matrix<double>.Build.Dense(actualBatchSize, _structure[^1]);
+            Matrix<double> batchInputs = Matrix<double>.Build.Dense(actualBatchSize, _structure[0]);
+            Matrix<double> batchTargets = Matrix<double>.Build.Dense(actualBatchSize, _structure[^1]);
 
             for (int i = 0; i < actualBatchSize; i++)
             {
@@ -314,6 +289,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 {
                     batchInputs[i, j] = inputs[indices[batchStart + i]][j];
                 }
+
                 for (int j = 0; j < _structure[^1]; j++)
                 {
                     batchTargets[i, j] = targets[indices[batchStart + i]][j];
@@ -321,7 +297,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             }
 
             // Accumulate gradients from this batch
-            var (batchGradients, batchBiasGradients, output) = ComputeBatchGradients(
+            (Matrix<double>[] batchGradients, Vector<double>[] batchBiasGradients, Matrix<double> output) = ComputeBatchGradients(
                 batchInputs,
                 batchTargets,
                 _weights,
@@ -359,132 +335,14 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
 
         UpdateWeightsAdam(learningRate);
-        //UpdateWeights();
 
         SyncMatricesToFlat();
 
-        double safeTotal = Math.Max((total * _structure[^1]), NearNullValue); 
+        double safeTotal = Math.Max(total * _structure[^1], NearNullValue);
         Error = errorSum / safeTotal;
         LastError = Error;
 
         return Error;
-    }
-
-    private void UpdateWeightsAdam(
-        double learningRate = LearningRate,
-        double beta1 = 0.9,
-        double beta2 = 0.999,
-        double epsilon = 1e-8)
-    {
-        _adamT++;
-        for (int layer = 0; layer < _weights.Length; layer++)
-        {
-            // Weights
-            _adamM[layer] = _adamM[layer] * beta1 + Gradients[layer] * (1 - beta1);
-            _adamV[layer] = _adamV[layer] * beta2 + Gradients[layer].PointwisePower(2.0) * (1 - beta2);
-            var mHat = _adamM[layer] / (1 - Math.Pow(beta1, _adamT));
-            var vHat = _adamV[layer] / (1 - Math.Pow(beta2, _adamT));
-            _weights[layer] -= mHat.PointwiseDivide(vHat.PointwiseSqrt() + epsilon) * learningRate;
-
-            // Biases
-            _adamMBias[layer] = _adamMBias[layer] * beta1 + GradientBiases[layer] * (1 - beta1);
-            _adamVBias[layer] = _adamVBias[layer] * beta2 + GradientBiases[layer].PointwisePower(2.0) * (1 - beta2);
-            var mHatB = _adamMBias[layer] / (1 - Math.Pow(beta1, _adamT));
-            var vHatB = _adamVBias[layer] / (1 - Math.Pow(beta2, _adamT));
-            _biases[layer] -= mHatB.PointwiseDivide(vHatB.PointwiseSqrt() + epsilon) * learningRate;
-        }
-    }
-
-    private void UpdateWeights()
-    {
-        for (int layer = 0; layer < _weights.Length; layer++)
-        {
-            var w = _weights[layer];
-            var g = Gradients[layer];
-            var prevG = _previousGradients[layer];
-            var stepMat = _updateValues[layer];
-            var lastChangeMat = _previousWeightChange[layer];
-
-            for (int r = 0; r < w.RowCount; r++)
-            {
-                for (int c = 0; c < w.ColumnCount; c++)
-                {
-                    double grad = g[r, c];
-                    double prevGrad = prevG[r, c];
-                    double step = stepMat[r, c];
-                    double lastChange = lastChangeMat[r, c];
-
-                    int sign = Math.Abs(grad * prevGrad) < NearNullValue ? 0 : Math.Sign(grad * prevGrad);
-                    double weightChange = 0.0;
-
-                    if (sign > 0)
-                    {
-                        step = Math.Min(step * VariableLearnRateBig, MaximumStepSize);
-                        weightChange = Math.Sign(grad) * step;
-                        w[r, c] += weightChange;
-                        prevG[r, c] = grad;
-                    }
-                    else if (sign < 0)
-                    {
-                        step = Math.Max(step * VariableLearnRateSmall, MinimumStepSize);
-                        // revert last change
-                        w[r, c] -= lastChange;
-                        prevG[r, c] = 0.0;
-                    }
-                    else
-                    {
-                        weightChange = Math.Sign(grad) * step;
-                        w[r, c] += weightChange;
-                        prevG[r, c] = grad;
-                    }
-
-                    stepMat[r, c] = step;
-                    lastChangeMat[r, c] = weightChange;
-                }
-            }
-
-            // Biases for this layer
-            var b = _biases[layer];
-            var gb = GradientBiases[layer];
-            var prevGb = _previousBiasGradients[layer];
-            var stepB = _updateBiasesValues[layer];
-            var lastChangeB = _previousBiasesChange[layer];
-
-            for (int i = 0; i < b.Count; i++)
-            {
-                double grad = gb[i];
-                double prevGrad = prevGb[i];
-                double step = stepB[i];
-                double lastChange = lastChangeB[i];
-
-                int sign = Math.Abs(grad * prevGrad) < NearNullValue ? 0 : Math.Sign(grad * prevGrad);
-                double biasChange = 0.0;
-
-                if (sign > 0)
-                {
-                    step = Math.Min(step * VariableLearnRateBig, MaximumStepSize);
-                    biasChange = Math.Sign(grad) * step;
-                    b[i] += biasChange;
-                    prevGb[i] = grad;
-                }
-                else if (sign < 0)
-                {
-                    step = Math.Max(step * VariableLearnRateSmall, MinimumStepSize);
-                    // revert last change
-                    b[i] -= lastChange;
-                    prevGb[i] = 0.0;
-                }
-                else
-                {
-                    biasChange = Math.Sign(grad) * step;
-                    b[i] += biasChange;
-                    prevGb[i] = grad;
-                }
-
-                stepB[i] = step;
-                lastChangeB[i] = biasChange;
-            }
-        }
     }
 
     private static void ApplyActivation(Matrix<double> values, IActivationFunction activationFunction)
@@ -513,8 +371,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         IActivationFunction[] activationFunctions)
     {
         int layers = weights.Length;
-        Matrix<double>[] values = new Matrix<double>[layers + 1];
-        Matrix<double>[] tempValues = new Matrix<double>[layers];
+        var values = new Matrix<double>[layers + 1];
+        var tempValues = new Matrix<double>[layers];
         values[0] = batchInputs;
 
         // Forward pass
@@ -529,7 +387,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         Matrix<double> output = values[^1].Clone();
 
         // Backward pass
-        Matrix<double>[] deltas = new Matrix<double>[layers];
+        var deltas = new Matrix<double>[layers];
         deltas[^1] = Matrix<double>.Build.Dense(output.RowCount, output.ColumnCount);
         for (int i = 0; i < output.RowCount; i++)
         {
@@ -540,6 +398,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 deltas[^1][i, j] = -p / q;
             }
         }
+
         MultiplyByDerivative(deltas[^1], values[^1], activationFunctions[^1]);
 
         for (int l = layers - 2; l >= 0; l--)
@@ -549,8 +408,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
 
         // Compute gradients
-        Matrix<double>[] gradients = new Matrix<double>[layers];
-        Vector<double>[] biasGradients = new Vector<double>[layers];
+        var gradients = new Matrix<double>[layers];
+        var biasGradients = new Vector<double>[layers];
 
         for (int l = 0; l < layers; l++)
         {
@@ -591,6 +450,34 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         return sum;
     }
 
+    private static void InitBiases(Vector<double> biases, Random random)
+    {
+        for (int i = 0; i < biases.Count; i++)
+        {
+            biases[i] = random.NextDouble() - 0.5;
+        }
+    }
+
+    private static void InitWeights(Matrix<double> weights, int inputSize, int outputSize, Random random)
+    {
+        double beta = 0.7 * Math.Pow(outputSize, 1.0 / inputSize);
+        for (int i = 0; i < outputSize; i++)
+        {
+            double norm = 0.0;
+            for (int j = 0; j < inputSize; j++)
+            {
+                weights[i, j] = random.NextDouble() - 0.5;
+                norm += weights[i, j] * weights[i, j];
+            }
+
+            norm = Math.Sqrt(norm);
+            for (int j = 0; j < inputSize; j++)
+            {
+                weights[i, j] = norm > 0 ? beta * weights[i, j] / norm : 0.0;
+            }
+        }
+    }
+
     private static void MultiplyByDerivative(Matrix<double> delta, Matrix<double> activation, IActivationFunction act)
     {
         for (int i = 0; i < delta.RowCount; i++)
@@ -604,7 +491,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     private static Matrix<double> VectorToRowMatrix(Vector<double> v, int rows)
     {
-        var matrix = Matrix<double>.Build.Dense(rows, v.Count);
+        Matrix<double> matrix = Matrix<double>.Build.Dense(rows, v.Count);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < v.Count; j++)
@@ -614,14 +501,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
 
         return matrix;
-    }
-
-    private static void InitBiases(Vector<double> biases, Random random)
-    {
-        for (int i = 0; i < biases.Count; i++)
-        {
-            biases[i] = random.NextDouble() - 0.5;
-        }
     }
 
     private void InitializeFlatArrays()
@@ -663,26 +542,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
     }
 
-    private static void InitWeights(Matrix<double> weights, int inputSize, int outputSize, Random random)
-    {
-        double beta = 0.7 * Math.Pow(outputSize, 1.0 / inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            double norm = 0.0;
-            for (int j = 0; j < inputSize; j++)
-            {
-                weights[i, j] = random.NextDouble() - 0.5;
-                norm += weights[i, j] * weights[i, j];
-            }
-
-            norm = Math.Sqrt(norm);
-            for (int j = 0; j < inputSize; j++)
-            {
-                weights[i, j] = norm > 0 ? beta * weights[i, j] / norm : 0.0;
-            }
-        }
-    }
-
     private void SyncFlatToMatrices()
     {
         for (int layer = 0; layer < _weights.Length; layer++)
@@ -691,7 +550,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             int biasStart = _biasOffsets[layer];
 
             // Copy weights
-            var matrix = _weights[layer];
+            Matrix<double> matrix = _weights[layer];
             int idx = weightStart;
             for (int row = 0; row < matrix.RowCount; row++)
             {
@@ -702,7 +561,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             }
 
             // Copy biases
-            var biasVector = _biases[layer];
+            Vector<double> biasVector = _biases[layer];
             for (int i = 0; i < biasVector.Count; i++)
             {
                 biasVector[i] = _flatBiases[biasStart + i];
@@ -718,7 +577,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             int biasStart = _biasOffsets[layer];
 
             // Copy weights
-            var matrix = _weights[layer];
+            Matrix<double> matrix = _weights[layer];
             int idx = weightStart;
             for (int row = 0; row < matrix.RowCount; row++)
             {
@@ -729,11 +588,36 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             }
 
             // Copy biases
-            var biasVector = _biases[layer];
+            Vector<double> biasVector = _biases[layer];
             for (int i = 0; i < biasVector.Count; i++)
             {
                 _flatBiases[biasStart + i] = biasVector[i];
             }
+        }
+    }
+
+    private void UpdateWeightsAdam(
+                                                double learningRate = LearningRate,
+        double beta1 = 0.9,
+        double beta2 = 0.999,
+        double epsilon = 1e-8)
+    {
+        _adamT++;
+        for (int layer = 0; layer < _weights.Length; layer++)
+        {
+            // Weights
+            _adamM[layer] = _adamM[layer] * beta1 + Gradients[layer] * (1 - beta1);
+            _adamV[layer] = _adamV[layer] * beta2 + Gradients[layer].PointwisePower(2.0) * (1 - beta2);
+            Matrix<double> mHat = _adamM[layer] / (1 - Math.Pow(beta1, _adamT));
+            Matrix<double> vHat = _adamV[layer] / (1 - Math.Pow(beta2, _adamT));
+            _weights[layer] -= mHat.PointwiseDivide(vHat.PointwiseSqrt() + epsilon) * learningRate;
+
+            // Biases
+            _adamMBias[layer] = _adamMBias[layer] * beta1 + GradientBiases[layer] * (1 - beta1);
+            _adamVBias[layer] = _adamVBias[layer] * beta2 + GradientBiases[layer].PointwisePower(2.0) * (1 - beta2);
+            Vector<double> mHatB = _adamMBias[layer] / (1 - Math.Pow(beta1, _adamT));
+            Vector<double> vHatB = _adamVBias[layer] / (1 - Math.Pow(beta2, _adamT));
+            _biases[layer] -= mHatB.PointwiseDivide(vHatB.PointwiseSqrt() + epsilon) * learningRate;
         }
     }
 }

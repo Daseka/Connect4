@@ -46,6 +46,7 @@
             tabPage3 = new TabPage();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
+            button2 = new Button();
             tabControl1.SuspendLayout();
             tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
@@ -69,6 +70,7 @@
             // 
             // tabPage1
             // 
+            tabPage1.Controls.Add(button2);
             tabPage1.Controls.Add(pictureBox1);
             tabPage1.Controls.Add(listBox1);
             tabPage1.Controls.Add(button1);
@@ -101,7 +103,7 @@
             listBox1.Location = new Point(700, 36);
             listBox1.Name = "listBox1";
             listBox1.ScrollAlwaysVisible = true;
-            listBox1.Size = new Size(626, 319);
+            listBox1.Size = new Size(624, 319);
             listBox1.TabIndex = 2;
             // 
             // button1
@@ -116,7 +118,7 @@
             // 
             // button4
             // 
-            button4.Location = new Point(1020, 11);
+            button4.Location = new Point(922, 11);
             button4.Name = "button4";
             button4.Size = new Size(100, 23);
             button4.TabIndex = 6;
@@ -126,7 +128,7 @@
             // 
             // button5
             // 
-            button5.Location = new Point(1138, 11);
+            button5.Location = new Point(1028, 11);
             button5.Name = "button5";
             button5.Size = new Size(75, 23);
             button5.TabIndex = 7;
@@ -148,7 +150,7 @@
             // 
             winPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             winPercentChart.BackColor = Color.Black;
-            winPercentChart.DeepLearnThreshold = 55;
+            winPercentChart.DeepLearnThreshold = 55D;
             winPercentChart.Location = new Point(6, 370);
             winPercentChart.Name = "winPercentChart";
             winPercentChart.Size = new Size(1318, 200);
@@ -247,6 +249,16 @@
             toolStripStatusLabel1.Size = new Size(39, 17);
             toolStripStatusLabel1.Text = "Ready";
             // 
+            // button2
+            // 
+            button2.Location = new Point(1109, 11);
+            button2.Name = "button2";
+            button2.Size = new Size(75, 23);
+            button2.TabIndex = 12;
+            button2.Text = "Coleseum";
+            button2.UseVisualStyleBackColor = true;
+            button2.Click += Coliseum_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -291,5 +303,6 @@
         private ToolStripStatusLabel toolStripStatusLabel1;
         private Connect4.GameParts.SimpleChart winPercentChart;
         private TextBox textBox1;
+        private Button button2;
     }
 }

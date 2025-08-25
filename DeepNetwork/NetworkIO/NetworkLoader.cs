@@ -1,8 +1,8 @@
-namespace DeepNetwork;
+namespace DeepNetwork.NetworkIO;
 
 public class NetworkLoader
 {
-    public static IStandardNetwork? LoadNetwork( string filePath)
+    public static IStandardNetwork? LoadNetwork(string filePath)
     {
         IStandardNetwork? flatDumbNetwork;
         IStandardNetwork? miniBatchMatrixNetwork;

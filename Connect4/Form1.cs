@@ -1,19 +1,24 @@
 using Connect4.Ais;
 using Connect4.GameParts;
 using DeepNetwork;
+using DeepNetwork.NetworkIO;
 
 namespace Connect4;
 
 public partial class Form1 : Form
 {
+    private const int AgentCatalogSize = 10;
+    private const double ExplorationConstant = 1.11;
+
     private readonly Connect4Game _connect4Game = new();
     private readonly Connect4Game _editorConnect4Game = new();
     private readonly List<GamePanel> _gamePanels = [];
 
-    private CancellationTokenSource _arenaCancelationToken = new();
-    private CancellationTokenSource _cancellationTokenSource = new();
+    private CancellationTokenSource _arenaCancelationSource = new();
+    private CancellationTokenSource _coliseimCancelationSource = new();
     private int _gamesPlayed = 0;
     private bool _isBattleArenaRunning = false;
+    private bool _isBattleColiseumRunning = false;
     private bool _isParallelSelfPlayRunning;
     private IStandardNetwork _newPolicyNetwork;
     private IStandardNetwork _newValueNetwork;
@@ -49,18 +54,17 @@ public partial class Form1 : Form
             _newValueNetwork = new FlatDumbNetwork([127, 256, 128, 64, 3]);
             _newPolicyNetwork = new FlatDumbNetwork([127, 256, 128, 64, 7]);
         }
-        
-        //_oldValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _oldValueNetwork;
-        //_oldPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _oldPolicyNetwork;
-        _oldPolicyNetwork.Trained = true;
-        _oldValueNetwork.Trained = true;
-        _yellowMcts = new Mcts(McstIterations, _oldValueNetwork, _oldPolicyNetwork);
 
-        //_newValueNetwork = FlatDumbNetwork.CreateFromFile(OldValueNetwork) ?? _newValueNetwork;
-        //_newPolicyNetwork = FlatDumbNetwork.CreateFromFile(OldPolicyNetwork) ?? _newPolicyNetwork;
-        _newPolicyNetwork.Trained = true;
-        _newValueNetwork.Trained = true;
-        _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
+        _agentCatalog = new AgentCatalog(AgentCatalogSize);
+        _agentCatalog.LoadCatalog();
+        _currentAgent = _agentCatalog.GetLatestAgent();
+
+        IStandardNetwork valueNetwork = _currentAgent?.ValueNetwork ?? _oldValueNetwork;
+        IStandardNetwork policyNetwork = _currentAgent?.PolicyNetwork ?? _oldPolicyNetwork;
+        valueNetwork.Trained = true;
+        policyNetwork.Trained = true;
+        _yellowMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
+        _redMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
 
         flowLayoutPanel1.BackColor = Color.Black;
         flowLayoutPanel1.BorderStyle = BorderStyle.None;
@@ -147,13 +151,15 @@ public partial class Form1 : Form
 
         if (_isBattleArenaRunning)
         {
-            _arenaCancelationToken.Cancel();
+            _arenaCancelationSource.Cancel();
             _isBattleArenaRunning = false;
+            button5.Text = "Arena";
         }
         else
         {
-            _arenaCancelationToken = new CancellationTokenSource();
+            _arenaCancelationSource = new CancellationTokenSource();
             _isBattleArenaRunning = true;
+            button5.Text = "Stop Arena";
             _ = Task.Run(BattleArena);
         }
     }
@@ -173,7 +179,7 @@ public partial class Form1 : Form
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
     {
         var save = MessageBox.Show(
-            "Save Telemetry?",
+            "Save Telemetry & Arena catalog?",
             "Confirm Save",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question) == DialogResult.Yes;
@@ -181,6 +187,7 @@ public partial class Form1 : Form
         if (save)
         {
             _telemetryHistory.SaveToFile();
+            _agentCatalog.SaveCatalog();
         }
     }
 
@@ -207,7 +214,7 @@ public partial class Form1 : Form
         _telemetryHistory.LoadFromFile();
         _newValueNetwork = NetworkLoader.LoadNetwork(OldValueNetwork) ?? _newValueNetwork;
         _newPolicyNetwork = NetworkLoader.LoadNetwork(OldPolicyNetwork) ?? _newPolicyNetwork;
-        
+
         _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
 
         _ = MessageBox.Show("telemetry and network loaded successfully.");
@@ -226,7 +233,7 @@ public partial class Form1 : Form
             EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
         }
 
-        int compMove = _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1)
+        int compMove = _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1, ExplorationConstant)
             .GetAwaiter()
             .GetResult();
 
@@ -260,8 +267,6 @@ public partial class Form1 : Form
 
     private void ResetButton_Click(object sender, EventArgs e)
     {
-        //TrainAsync(_redMcts, 0.02).GetAwaiter().GetResult();
-
         _connect4Game.ResetGame();
         pictureBox1.Refresh();
     }
@@ -270,7 +275,7 @@ public partial class Form1 : Form
     {
         if (_isParallelSelfPlayRunning)
         {
-            _cancellationTokenSource?.Cancel();
+            _arenaCancelationSource?.Cancel();
             button4.Text = "Parallel Play";
             _isParallelSelfPlayRunning = false;
             toolStripStatusLabel1.Text = "Parallel self-play stopped";
@@ -281,19 +286,36 @@ public partial class Form1 : Form
             _isParallelSelfPlayRunning = true;
             toolStripStatusLabel1.Text = "Starting parallel self-play...";
 
-            _ = Task.Run(() => SelfPlayParallelAsync(McstIterations));
+            _ = Task.Run(() => SelfPlayParallelAsync(McstIterations, explorationFactor: ExplorationConstant));
         }
     }
 
     private void TrainButton_Click(object sender, EventArgs e)
     {
-        TrainAsync(_redMcts, 0.05).GetAwaiter().GetResult();
-        TrainAsync(_yellowMcts, 0.05).GetAwaiter().GetResult();
+        TrainAsync(_redMcts).GetAwaiter().GetResult();
+        TrainAsync(_yellowMcts).GetAwaiter().GetResult();
     }
 
     private void ReadBoardStateButton_Click(object sender, EventArgs e)
     {
         _editorConnect4Game.SetState(textBox1.Text);
         pictureBox2.Refresh();
+    }
+
+    private void Coliseum_Click(object sender, EventArgs e)
+    {
+        if (_isBattleColiseumRunning)
+        {
+            _coliseimCancelationSource.Cancel();
+            _isBattleColiseumRunning = false;
+            button2.Text = "Coliseum";
+        }
+        else
+        {
+            _coliseimCancelationSource = new CancellationTokenSource();
+            _isBattleColiseumRunning = true;
+            button2.Text = "Stop Coliseum";
+            _ = Task.Run(BattleColiseum);
+        }
     }
 }
