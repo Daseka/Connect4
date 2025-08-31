@@ -10,8 +10,6 @@ public interface IStandardNetwork
 
     public double[] Calculate(double[] input);
 
-    public double[] CalculateCached(string id, double[] input);
-
     public void SaveToFile(string fileName);
 
     public double ExplorationFactor { get; set; }

@@ -8,7 +8,6 @@ namespace Connect4;
 public partial class Form1 : Form
 {
     private const int AgentCatalogSize = 10;
-    private const double ExplorationConstant = 1.11;
 
     private readonly Connect4Game _connect4Game = new();
     private readonly Connect4Game _editorConnect4Game = new();
@@ -61,8 +60,8 @@ public partial class Form1 : Form
 
         IStandardNetwork valueNetwork = _currentAgent?.ValueNetwork ?? _oldValueNetwork;
         IStandardNetwork policyNetwork = _currentAgent?.PolicyNetwork ?? _oldPolicyNetwork;
-        valueNetwork.Trained = true;
-        policyNetwork.Trained = true;
+//        valueNetwork.Trained = true;
+//        policyNetwork.Trained = true;
         _yellowMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
         _redMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
 
@@ -104,20 +103,6 @@ public partial class Form1 : Form
         tabPage3.Controls.Add(singleTabControl);
     }
 
-    private void EndGame(
-        Connect4Game connect4Game,
-        Mcts mcts,
-        ListBox listBox,
-        PictureBox pictureBox)
-    {
-        mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
-        connect4Game.ResetGame();
-        _telemetryHistory.MergeFrom(mcts.GetTelemetryHistory());
-
-        pictureBox.Invoke(pictureBox.Refresh);
-        listBox.Invoke(listBox.Items.Clear);
-    }
-
     private static int PlacePiece(
         Connect4Game connect4Game,
         int column,
@@ -148,19 +133,25 @@ public partial class Form1 : Form
 
     private void Arena_Click(object sender, EventArgs e)
     {
-
-        if (_isBattleArenaRunning)
+        try
         {
-            _arenaCancelationSource.Cancel();
-            _isBattleArenaRunning = false;
-            button5.Text = "Arena";
+            if (_isBattleArenaRunning)
+            {
+                _arenaCancelationSource.Cancel();
+                _isBattleArenaRunning = false;
+                button5.Text = "Arena";
+            }
+            else
+            {
+                _arenaCancelationSource = new CancellationTokenSource();
+                _isBattleArenaRunning = true;
+                button5.Text = "Stop Arena";
+                _ = Task.Run(BattleArena);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            _arenaCancelationSource = new CancellationTokenSource();
-            _isBattleArenaRunning = true;
-            button5.Text = "Stop Arena";
-            _ = Task.Run(BattleArena);
+            _ = MessageBox.Show($"Error starting/stopping arena: {ex.Message} \n{ex.StackTrace}");
         }
     }
 
@@ -174,6 +165,37 @@ public partial class Form1 : Form
             winPercentChart.ClearData();
         });
         _ = MessageBox.Show("Chart history cleared successfully.");
+    }
+
+    private void Coliseum_Click(object sender, EventArgs e)
+    {
+        if (_isBattleColiseumRunning)
+        {
+            _coliseimCancelationSource.Cancel();
+            _isBattleColiseumRunning = false;
+            button2.Text = "Coliseum";
+        }
+        else
+        {
+            _coliseimCancelationSource = new CancellationTokenSource();
+            _isBattleColiseumRunning = true;
+            button2.Text = "Stop Coliseum";
+            _ = Task.Run(BattleColiseum);
+        }
+    }
+
+    private void EndGame(
+                            Connect4Game connect4Game,
+        Mcts mcts,
+        ListBox listBox,
+        PictureBox pictureBox)
+    {
+        mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
+        connect4Game.ResetGame();
+        _telemetryHistory.MergeFrom(mcts.GetTelemetryHistory());
+
+        pictureBox.Invoke(pictureBox.Refresh);
+        listBox.Invoke(listBox.Items.Clear);
     }
 
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -231,9 +253,15 @@ public partial class Form1 : Form
             _ = MessageBox.Show($"{color} Player wins!");
 
             EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
+            return;
         }
 
-        int compMove = _redMcts.GetBestMove(_connect4Game.GameBoard, _connect4Game.CurrentPlayer == 1 ? 2 : 1, ExplorationConstant)
+        int compMove = _redMcts.GetBestMove(
+            _connect4Game.GameBoard, 
+            _connect4Game.CurrentPlayer == 1 ? 2 : 1, 
+            ExplorationConstant,
+            0,
+            true)
             .GetAwaiter()
             .GetResult();
 
@@ -265,6 +293,14 @@ public partial class Form1 : Form
         _editorConnect4Game.DrawBoard(e.Graphics);
     }
 
+    private void ReadBoardStateButton_Click(object sender, EventArgs e)
+    {
+        _editorConnect4Game.SetState(textBox1.Text);
+        pictureBox2.Refresh();
+
+        Text = $"LastPlayed {_editorConnect4Game.GameBoard.LastPlayed.ToString()}";
+    }
+
     private void ResetButton_Click(object sender, EventArgs e)
     {
         _connect4Game.ResetGame();
@@ -286,7 +322,7 @@ public partial class Form1 : Form
             _isParallelSelfPlayRunning = true;
             toolStripStatusLabel1.Text = "Starting parallel self-play...";
 
-            _ = Task.Run(() => SelfPlayParallelAsync(McstIterations, explorationFactor: ExplorationConstant));
+            _ = Task.Run(() => VsPlayParallel(_redMcts, _yellowMcts, McstIterations, explorationFactor: ExplorationConstant));
         }
     }
 
@@ -294,28 +330,5 @@ public partial class Form1 : Form
     {
         TrainAsync(_redMcts).GetAwaiter().GetResult();
         TrainAsync(_yellowMcts).GetAwaiter().GetResult();
-    }
-
-    private void ReadBoardStateButton_Click(object sender, EventArgs e)
-    {
-        _editorConnect4Game.SetState(textBox1.Text);
-        pictureBox2.Refresh();
-    }
-
-    private void Coliseum_Click(object sender, EventArgs e)
-    {
-        if (_isBattleColiseumRunning)
-        {
-            _coliseimCancelationSource.Cancel();
-            _isBattleColiseumRunning = false;
-            button2.Text = "Coliseum";
-        }
-        else
-        {
-            _coliseimCancelationSource = new CancellationTokenSource();
-            _isBattleColiseumRunning = true;
-            button2.Text = "Stop Coliseum";
-            _ = Task.Run(BattleColiseum);
-        }
     }
 }

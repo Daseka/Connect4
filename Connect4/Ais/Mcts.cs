@@ -20,7 +20,12 @@ public class Mcts(
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
     public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
 
-    public Task<int> GetBestMove(GameBoard gameBoard, int previousPlayer, double explorationFactor)
+    public Task<int> GetBestMove(
+        GameBoard gameBoard, 
+        int previousPlayer, 
+        double explorationFactor, 
+        int movesPlayed,
+        bool isDeterministic = false)
     {
         var rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
@@ -42,7 +47,13 @@ public class Mcts(
         stopwatch.Stop();
         UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
-        var bestChild = rootNode.GetMostValuableChild();
+        var bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
+        if (bestChild != null)
+        {
+            //detach best child from parent to save memory
+            bestChild.Parent = null; 
+        }
+        
         _rootNode = bestChild;
 
         return Task.FromResult(bestChild?.Move ?? -1);
@@ -89,9 +100,8 @@ public class Mcts(
             node.IsTerminal = true;
             return 0;
         }
-
-        double[] boardStateArray = [.. node.GameBoard.StateToArray().Select(x => (double)x)];
-        double[] winProbability = valueNetwork.CalculateCached(node.GameBoard.StateToString(), boardStateArray);
+        
+        double[] winProbability = node.GetValueCached(valueNetwork);
 
         return node.GameBoard.LastPlayed == Player.Red
             ? winProbability[0]

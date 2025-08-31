@@ -1,20 +1,21 @@
-using Connect4.GameParts;
+﻿using Connect4.GameParts;
 using DeepNetwork;
 
 namespace Connect4.Ais;
+
 public class Node
 {
+    private double[]? _cachedProbability = null;
+    private double[]? _cachedValue = null;
+
     //private const double ExplorationConstant =0.8;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
     public int Move { get; set; }
-    public Node? Parent { get; }
+    public Node? Parent { get; set; }
     public int PlayerToPlay { get; set; }
-
-    // This is the player who made the move that led to this node
     public int PLayerWhoMadeMove { get; set; } = 0;
-
     public double Ucb { get; set; }
     public double Visits { get; private set; }
     public double Wins { get; private set; }
@@ -66,13 +67,9 @@ public class Node
         Node? bestChild = null;
         Node? winningChild = null;
 
-        double[] boardStateArray = [.. GameBoard.StateToArray().Select(x => (double)x)];
-        string id = GameBoard.StateToString();
-        double[] policyProbability = policyNetwork.CalculateCached(id, boardStateArray);
+        double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard, ref _cachedProbability);
 
-        
         //DirchletNoise.AddNoise(policyProbability, random);
-        
 
         foreach (Node node in Children)
         {
@@ -96,24 +93,69 @@ public class Node
         return winningChild ?? bestChild;
     }
 
-    public Node? GetMostValuableChild()
+    public Node? GetMostValuableChild(int movesPlayed, bool isDeterministic)
     {
-        double currentMaxValue = double.MinValue;
-        double currentMinVisits = double.MinValue;
-        Node? bestChild = null;
+        int index = SelectMoveFromVisits([..Children.Select(c => (int)c.Visits)], movesPlayed, isDeterministic);
 
-        foreach (Node node in Children)
+        return index < 0 || index >= Children.Count 
+            ? null 
+            : Children[index];
+    }
+
+    private int SelectMoveFromVisits(int[] visitCounts, int movesPlayed, bool isDeterministic)
+    {
+        double temperature = movesPlayed < 8 ? 2 : 0;
+        
+        if (temperature == 0 || isDeterministic)
         {
-            double value = node.Visits == 0 ? 0 : node.Wins / node.Visits;
-            if (value > currentMaxValue || (value == currentMaxValue && node.Visits < currentMinVisits))
+            int mostVisited = 0;
+            int maxVisits= 0;
+            int? winningChild = null;
+            for (int i = 0; i < visitCounts.Length; i++)
             {
-                currentMinVisits = node.Visits;
-                currentMaxValue = value;
-                bestChild = node;
+                if (visitCounts[i] > maxVisits)
+                {
+                    maxVisits = visitCounts[i];
+                    mostVisited = i;
+                }
+
+                if (Children[i].GameBoard.HasWon((int)Children[i].PLayerWhoMadeMove))
+                {
+                    winningChild = i;
+                }
+            }
+
+            //prioratize winning child over best child
+            return winningChild ?? mostVisited;
+        }
+
+        double[] weights = new double[visitCounts.Length];
+        double sumWeights = 0;
+        for (int i = 0; i < visitCounts.Length; i++)
+        {
+            if (visitCounts[i] > 0)
+            {
+                weights[i] = Math.Pow(visitCounts[i], 1/ temperature);
+                sumWeights += weights[i];
             }
         }
 
-        return bestChild;
+        double selectedValue = Random.Shared.NextDouble() * sumWeights;
+        for (int i = 0; i < weights.Length; i++)
+        {
+            if (weights[i] <= 0)
+            {
+                continue;
+            }
+
+            selectedValue -= weights[i];
+            if (selectedValue <= 0)
+            {
+                return i;
+            }
+        }
+
+        return Array.IndexOf(visitCounts, visitCounts.Max());
     }
 
     public bool IsLeaf()
@@ -133,5 +175,32 @@ public class Node
         Wins += result > 0
             ? Math.Round(result, 4)
             : Math.Round(1 + result, 4);
+    }
+
+    public double[] GetValueCached(IStandardNetwork valueNetwork)
+    {
+        if (_cachedValue is not null)
+        {
+            return _cachedValue;
+        }
+
+        _cachedValue = valueNetwork.Calculate([.. GameBoard.StateToArray().Select(x => (double)x)]);
+
+        return _cachedValue;
+    }
+
+    private static double[] GetProbabilityCached(
+        IStandardNetwork policyNetwork, 
+        GameBoard gameBoard, 
+        ref double[]? cachedProbability)
+    {
+        if (cachedProbability is not null)
+        {
+            return cachedProbability;
+        }
+
+        cachedProbability = policyNetwork.Calculate([.. gameBoard.StateToArray().Select(x => (double)x)]);
+
+        return cachedProbability;
     }
 }

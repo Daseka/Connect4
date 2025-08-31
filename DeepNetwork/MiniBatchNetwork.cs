@@ -1,4 +1,4 @@
-using DeepNetwork.ActivationFunctions;
+﻿using DeepNetwork.ActivationFunctions;
 using MathNet.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
@@ -13,7 +13,7 @@ namespace DeepNetwork;
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
     private const int CacheSize = 500000;
-    private const double LearningRate = 0.0001;
+    private const double LearningRate = 0.00001;
     private const double NearNullValue = 1e-11d;
 
     private readonly IActivationFunction[] _activations;
@@ -194,28 +194,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         return _values.AsSpan(lastLayerStart, _structure[^1]).ToArray();
     }
 
-    public double[] CalculateCached(string id, double[] input)
-    {
-        if (_cachedValues.TryGetValue(id, out double[]? cachedResult))
-        {
-            return cachedResult;
-        }
-
-        double[] result = Calculate(input);
-        _cachedValues[id] = result;
-
-        _cacheKeys.Enqueue(id);
-        while (_cachedValues.Count > CacheSize)
-        {
-            if (_cacheKeys.TryDequeue(out string? oldestKey))
-            {
-                _ = _cachedValues.TryRemove(oldestKey, out _);
-            }
-        }
-
-        return result;
-    }
-
     public void ClearCache()
     {
         _cachedValues.Clear();
@@ -260,89 +238,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         settings.Converters.Add(new DenseVectorConverter());
 
         string json = JsonConvert.SerializeObject(wrapper, Formatting.Indented, settings);
-        File.WriteAllText(fileName, json);
-    }
-
-    public double TrainMiniBatch(double[][] inputs, double[][] targets, int batchSize, double learningRate = LearningRate)
-    {
-        // Reset accumulated gradients for the epoch
-        for (int i = 0; i < Gradients.Length; i++)
-        {
-            Gradients[i].Clear();
-            GradientBiases[i].Clear();
-        }
-
-        int total = inputs.Length;
-        int[] indices = [.. Enumerable.Range(0, total).OrderBy(_ => _rand.Next())];
-        double errorSum = 0;
-        int batchCount = 0;
-
-        for (int batchStart = 0; batchStart < total; batchStart += batchSize)
-        {
-            int actualBatchSize = Math.Min(batchSize, total - batchStart);
-            Matrix<double> batchInputs = Matrix<double>.Build.Dense(actualBatchSize, _structure[0]);
-            Matrix<double> batchTargets = Matrix<double>.Build.Dense(actualBatchSize, _structure[^1]);
-
-            for (int i = 0; i < actualBatchSize; i++)
-            {
-                for (int j = 0; j < _structure[0]; j++)
-                {
-                    batchInputs[i, j] = inputs[indices[batchStart + i]][j];
-                }
-
-                for (int j = 0; j < _structure[^1]; j++)
-                {
-                    batchTargets[i, j] = targets[indices[batchStart + i]][j];
-                }
-            }
-
-            // Accumulate gradients from this batch
-            (Matrix<double>[] batchGradients, Vector<double>[] batchBiasGradients, Matrix<double> output) = ComputeBatchGradients(
-                batchInputs,
-                batchTargets,
-                _weights,
-                _biases,
-                _activations);
-
-            // Accumulate gradients
-            for (int l = 0; l < Gradients.Length; l++)
-            {
-                Gradients[l] += batchGradients[l];
-                GradientBiases[l] += batchBiasGradients[l];
-            }
-
-            // Calculate cross-entropy error
-            for (int i = 0; i < actualBatchSize; i++)
-            {
-                for (int j = 0; j < _structure[^1]; j++)
-                {
-                    double outVal = output[i, j];
-                    double target = batchTargets[i, j];
-                    double safeOut = Math.Max(outVal, NearNullValue);
-                    double safeTarget = Math.Max(target, NearNullValue);
-                    errorSum += safeTarget * Math.Log(safeTarget / safeOut);
-                }
-            }
-
-            batchCount++;
-        }
-
-        // Average gradients
-        for (int i = 0; i < Gradients.Length; i++)
-        {
-            Gradients[i] /= batchCount;
-            GradientBiases[i] /= batchCount;
-        }
-
-        UpdateWeightsAdam(learningRate);
-
-        SyncMatricesToFlat();
-
-        double safeTotal = Math.Max(total * _structure[^1], NearNullValue);
-        Error = errorSum / safeTotal;
-        LastError = Error;
-
-        return Error;
+        File.WriteAllText(fileName, json); 
     }
 
     private static void ApplyActivation(Matrix<double> values, IActivationFunction activationFunction)
@@ -361,63 +257,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 values[i, j] = tempRow[j];
             }
         }
-    }
-
-    private static (Matrix<double>[] gradients, Vector<double>[] biasGradients, Matrix<double> output) ComputeBatchGradients(
-        Matrix<double> batchInputs,
-        Matrix<double> batchTargets,
-        Matrix<double>[] weights,
-        Vector<double>[] biases,
-        IActivationFunction[] activationFunctions)
-    {
-        int layers = weights.Length;
-        var values = new Matrix<double>[layers + 1];
-        var tempValues = new Matrix<double>[layers];
-        values[0] = batchInputs;
-
-        // Forward pass
-        for (int l = 0; l < layers; l++)
-        {
-            tempValues[l] = values[l] * weights[l].Transpose();
-            tempValues[l] = tempValues[l] + VectorToRowMatrix(biases[l], tempValues[l].RowCount);
-            values[l + 1] = tempValues[l].Clone();
-            ApplyActivation(values[l + 1], activationFunctions[l + 1]);
-        }
-
-        Matrix<double> output = values[^1].Clone();
-
-        // Backward pass
-        var deltas = new Matrix<double>[layers];
-        deltas[^1] = Matrix<double>.Build.Dense(output.RowCount, output.ColumnCount);
-        for (int i = 0; i < output.RowCount; i++)
-        {
-            for (int j = 0; j < output.ColumnCount; j++)
-            {
-                double p = batchTargets[i, j];
-                double q = Math.Max(output[i, j], NearNullValue);
-                deltas[^1][i, j] = -p / q;
-            }
-        }
-
-        MultiplyByDerivative(deltas[^1], values[^1], activationFunctions[^1]);
-
-        for (int l = layers - 2; l >= 0; l--)
-        {
-            deltas[l] = deltas[l + 1] * weights[l + 1];
-            MultiplyByDerivative(deltas[l], values[l + 1], activationFunctions[l + 1]);
-        }
-
-        // Compute gradients
-        var gradients = new Matrix<double>[layers];
-        var biasGradients = new Vector<double>[layers];
-
-        for (int l = 0; l < layers; l++)
-        {
-            gradients[l] = values[l].TransposeThisAndMultiply(deltas[l]).Transpose() / batchInputs.RowCount;
-            biasGradients[l] = deltas[l].ColumnSums() / batchInputs.RowCount;
-        }
-
-        return (gradients, biasGradients, output);
     }
 
     private static double DotProduct(ReadOnlySpan<double> values, ReadOnlySpan<double> weights)
@@ -478,13 +317,13 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
     }
 
-    private static void MultiplyByDerivative(Matrix<double> delta, Matrix<double> activation, IActivationFunction act)
+    private static void MultiplyByDerivative(Matrix<double> delta, Matrix<double> values, IActivationFunction act)
     {
         for (int i = 0; i < delta.RowCount; i++)
         {
             for (int j = 0; j < delta.ColumnCount; j++)
             {
-                delta[i, j] *= act.Derivative(activation[i, j]);
+                delta[i, j] *= act.Derivative(values[i, j]);
             }
         }
     }
@@ -596,27 +435,176 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
     }
 
+    public double TrainMiniBatch(double[][] inputs, double[][] targets, int batchSize, double learningRate = LearningRate)
+    {
+        for (int i = 0; i < Gradients.Length; i++)
+        {
+            Gradients[i].Clear();
+            GradientBiases[i].Clear();
+        }
+
+        int total = inputs.Length;
+        int[] randomBatchIndex = [.. Enumerable.Range(0, total).OrderBy(_ => _rand.Next())];
+        double errorSum = 0;
+        int totalCount = total * _structure[^1];
+        int totalSamplesAccumulated = 0;
+
+        for (int batchStart = 0; batchStart < total; batchStart += batchSize)
+        {
+            int actualBatchSize = Math.Min(batchSize, total - batchStart);
+            Matrix<double> batchInputs = Matrix<double>.Build.Dense(actualBatchSize, _structure[0]);
+            Matrix<double> batchTargets = Matrix<double>.Build.Dense(actualBatchSize, _structure[^1]);
+
+            for (int i = 0; i < actualBatchSize; i++)
+            {
+                int index = randomBatchIndex[batchStart + i];
+                for (int j = 0; j < _structure[0]; j++)
+                {
+                    batchInputs[i, j] = inputs[index][j];
+                }
+
+                for (int j = 0; j < _structure[^1]; j++)
+                {
+                    batchTargets[i, j] = targets[index][j];
+                }
+            }
+
+            (Matrix<double>[] batchGradients, Vector<double>[] batchBiasGradients, Matrix<double> output) =
+                ComputeBatchGradients(batchInputs, batchTargets, _weights, _biases, _activations);
+
+            // Accumulate gradients
+            for (int l = 0; l < Gradients.Length; l++)
+            {
+                Gradients[l] += batchGradients[l] * actualBatchSize;
+                GradientBiases[l] += batchBiasGradients[l] * actualBatchSize;
+            }
+
+            // cross-entropy error
+            for (int i = 0; i < actualBatchSize; i++)
+            {
+                for (int j = 0; j < _structure[^1]; j++)
+                {
+                    double p = Math.Max(batchTargets[i, j], NearNullValue);
+                    double q = Math.Max(output[i, j], NearNullValue);
+                    errorSum += p * Math.Log(p / q);
+                }
+            }
+
+            totalSamplesAccumulated += actualBatchSize;
+        }
+
+        // Average gradients
+        for (int l = 0; l < Gradients.Length; l++)
+        {
+            Gradients[l] /= totalSamplesAccumulated;
+            GradientBiases[l] /= totalSamplesAccumulated;
+        }
+
+        UpdateWeightsAdam(learningRate);
+        SyncMatricesToFlat();
+
+        double safeTotal = Math.Max(totalCount, NearNullValue);
+        Error = errorSum / safeTotal;
+        LastError = Error;
+
+        return Error;
+    }
+
+    private static (Matrix<double>[] gradients, Vector<double>[] biasGradients, Matrix<double> output)
+        ComputeBatchGradients(
+            Matrix<double> batchInputs,
+            Matrix<double> batchTargets,
+            Matrix<double>[] weights,
+            Vector<double>[] biases,
+            IActivationFunction[] activationFunctions)
+    {
+        int layers = weights.Length;
+        var values = new Matrix<double>[layers + 1];
+        var tempValues = new Matrix<double>[layers];
+        values[0] = batchInputs;
+
+        // Forwards
+        for (int l = 0; l < layers; l++)
+        {
+            tempValues[l] = values[l] * weights[l].Transpose();
+            tempValues[l] = tempValues[l] + VectorToRowMatrix(biases[l], tempValues[l].RowCount);
+            values[l + 1] = tempValues[l].Clone();
+            ApplyActivation(values[l + 1], activationFunctions[l + 1]);
+        }
+
+        Matrix<double> output = values[^1].Clone();
+
+        // Backwards
+        var deltas = new Matrix<double>[layers];
+        bool softmaxLast = activationFunctions[^1] is SoftMaxActivationFunction;
+        if (softmaxLast)
+        {
+            // only usable if last layer is soft max in combination with cross entropy loss function
+            deltas[^1] = output - batchTargets;
+        }
+        else
+        {
+            // when output layer is sigmoid 
+            deltas[^1] = Matrix<double>.Build.Dense(output.RowCount, output.ColumnCount);
+            for (int i = 0; i < output.RowCount; i++)
+            {
+                for (int j = 0; j < output.ColumnCount; j++)
+                {
+                    double target = batchTargets[i, j];
+                    double outputValue = output[i, j];
+                    double difference = (outputValue - target);
+                    deltas[^1][i, j] = difference * activationFunctions[^1].Derivative(output[i, j]);
+                }
+            }
+        }
+
+        for (int l = layers - 2; l >= 0; l--)
+        {
+            deltas[l] = deltas[l + 1] * weights[l + 1];
+            MultiplyByDerivative(deltas[l], values[l + 1], activationFunctions[l + 1]);
+        }
+
+        var gradients = new Matrix<double>[layers];
+        var biasGradients = new Vector<double>[layers];
+        for (int l = 0; l < layers; l++)
+        {
+            gradients[l] = values[l].TransposeThisAndMultiply(deltas[l]).Transpose() / batchInputs.RowCount;
+            biasGradients[l] = deltas[l].ColumnSums() / batchInputs.RowCount;
+        }
+
+        return (gradients, biasGradients, output);
+    }
+
     private void UpdateWeightsAdam(
-                                                double learningRate = LearningRate,
+        double learningRate = LearningRate,
         double beta1 = 0.9,
         double beta2 = 0.999,
-        double epsilon = 1e-8)
+        double epsilon = 1e-8) 
     {
         _adamT++;
+        double b1Corr = 1 - Math.Pow(beta1, _adamT);
+        double b2Corr = 1 - Math.Pow(beta2, _adamT);
+
         for (int layer = 0; layer < _weights.Length; layer++)
         {
             // Weights
-            _adamM[layer] = _adamM[layer] * beta1 + Gradients[layer] * (1 - beta1);
-            _adamV[layer] = _adamV[layer] * beta2 + Gradients[layer].PointwisePower(2.0) * (1 - beta2);
-            Matrix<double> mHat = _adamM[layer] / (1 - Math.Pow(beta1, _adamT));
-            Matrix<double> vHat = _adamV[layer] / (1 - Math.Pow(beta2, _adamT));
+            _adamM[layer].Multiply(beta1, _adamM[layer]);
+            _adamM[layer] += Gradients[layer] * (1 - beta1);
+            _adamV[layer].Multiply(beta2, _adamV[layer]);
+            _adamV[layer] += Gradients[layer].PointwisePower(2.0) * (1 - beta2);
+            
+            var mHat = _adamM[layer] / b1Corr;
+            var vHat = _adamV[layer] / b2Corr;
             _weights[layer] -= mHat.PointwiseDivide(vHat.PointwiseSqrt() + epsilon) * learningRate;
 
             // Biases
-            _adamMBias[layer] = _adamMBias[layer] * beta1 + GradientBiases[layer] * (1 - beta1);
-            _adamVBias[layer] = _adamVBias[layer] * beta2 + GradientBiases[layer].PointwisePower(2.0) * (1 - beta2);
-            Vector<double> mHatB = _adamMBias[layer] / (1 - Math.Pow(beta1, _adamT));
-            Vector<double> vHatB = _adamVBias[layer] / (1 - Math.Pow(beta2, _adamT));
+            _adamMBias[layer].Multiply(beta1, _adamMBias[layer]);
+            _adamMBias[layer] += GradientBiases[layer] * (1 - beta1);
+            _adamVBias[layer].Multiply(beta2, _adamVBias[layer]);
+            _adamVBias[layer] += GradientBiases[layer].PointwisePower(2.0) * (1 - beta2);
+
+            var mHatB = _adamMBias[layer] / b1Corr;
+            var vHatB = _adamVBias[layer] / b2Corr;
             _biases[layer] -= mHatB.PointwiseDivide(vHatB.PointwiseSqrt() + epsilon) * learningRate;
         }
     }

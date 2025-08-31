@@ -7,7 +7,7 @@ namespace Connect4;
 
 public partial class Form1 : Form
 {
-    private const int ColiseumGames = 100;
+    private const int ColiseumGames = 300;
 
     public async Task BattleColiseum()
     {
@@ -28,24 +28,52 @@ public partial class Form1 : Form
                 listBox1.SelectedIndex = listBox1.Items.Count - 1;
             });
 
-            for (int j = i - 1; j >= 0; j--)
+            for (int j = agents.Length - 1; j >= 0; j--)
             {
+                if (i == j)
+                {
+                    continue;
+                }
                 Agent agent2 = agents[j];
                 agent2.ValueNetwork.ExplorationFactor = agent2.ExplorationFactor;
                 agent2.PolicyNetwork.ExplorationFactor = agent2.ExplorationFactor;
 
-                await PlayGames(agent1, agent2, ColiseumGames);
+                var (red,yellow,draw,totals ) = await PlayGames(agent1, agent2, ColiseumGames / 2);
+                var redWins = red;
+                var drawWins = draw;
+                var totalWins = totals;
+
+                (red, yellow, draw, totals)  = await PlayGames(agent2, agent1, ColiseumGames / 2);
+                redWins += yellow;
+                drawWins += draw;
+                totalWins += totals;
+                double _redWithDrawPercent = (redWins + (drawWins * 0.5)) / totalWins * 100.0;
+
+                _ = BeginInvoke(() =>
+                {
+                    string mark = _redWithDrawPercent > 50 ? "✔" : "╳";
+                    _ = listBox1.Items.Add($"{_redWithDrawPercent:F2}% \t Gen: {agent2.Generation}  {mark}");
+                    listBox1.SelectedIndex = listBox1.Items.Count - 1;
+                });
             }
         }
+
+        _ = BeginInvoke(() =>
+        {
+            toolStripStatusLabel1.Text = "Coliseum completed!";
+            button4.Text = "Parallel Play";
+            _isParallelSelfPlayRunning = false;
+        });
     }
 
-    private async Task PlayGames(Agent agent1, Agent agent2, int numberOfGames)
+    private async Task<(int redWins, int yellowWins, int drawWins, int totalWins)> 
+        PlayGames(Agent agent1, Agent agent2, int numberOfGames)
     {
         CancellationToken cancellationToken = _coliseimCancelationSource.Token;
         int processorCount = Environment.ProcessorCount;
         int parallelGames = Math.Max(2, processorCount - 1);
 
-        int totalGames = numberOfGames > 0 ? numberOfGames : SelfPlayGames;
+        int totalGames = numberOfGames > 0 ? numberOfGames : VsGames;
 
         int gamesPerThread = totalGames / parallelGames;
         int remainder = totalGames % parallelGames;
@@ -105,15 +133,15 @@ public partial class Form1 : Form
                             Mcts mcts = game.CurrentPlayer == (int)Player.Red ? redMcts : yellowMcts;
 
                             double factor = mcts.ValueNetwork.ExplorationFactor;
-                            int move = await mcts.GetBestMove(game.GameBoard, (int)game.GameBoard.LastPlayed, factor);
+                            int move = await mcts.GetBestMove(
+                                game.GameBoard, 
+                                (int)game.GameBoard.LastPlayed, 
+                                factor,
+                                0,
+                                true);
 
                             if (move == -1)
                             {
-                                redMcts.SetWinnerTelemetryHistory(Winner.Draw);
-                                yellowMcts.SetWinnerTelemetryHistory(Winner.Draw);
-                                game.ResetGame();
-                                gameEnded = true;
-
                                 draws++;
                                 gamesPlayed++;
 
@@ -122,6 +150,9 @@ public partial class Form1 : Form
                                     panel.RecordResult(Winner.Draw);
                                     pictureBox.Refresh();
                                 });
+                                game.ResetGame();
+
+                                gameEnded = true;
 
                                 globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
                                 _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
@@ -134,7 +165,6 @@ public partial class Form1 : Form
 
                             if (winner != 0)
                             {
-                                gameEnded = true;
                                 if (winner == 1)
                                 {
                                     redWins++;
@@ -146,11 +176,17 @@ public partial class Form1 : Form
 
                                 gamesPlayed++;
 
-                                _ = BeginInvoke(() => panel.RecordResult(game.Winner));
+                                _ = BeginInvoke(() => 
+                                {
+                                    Winner result = game.Winner;
+                                    panel.RecordResult(result);
+                                });
                                 globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
                                 _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
                                 game.ResetGame();
+                                gameEnded = true;
+
                                 _ = BeginInvoke(() => pictureBox.Refresh());
 
                                 continue;
@@ -173,16 +209,18 @@ public partial class Form1 : Form
         _ = BeginInvoke(() =>
         {
             UpdateGlobalStats(globalStats, totalGames);
-            string mark = _redWithDrawPercent > 50 ? "✔" : "╳";
-            _ = listBox1.Items.Add($"Gen: {agent2.Generation} \t{_redWithDrawPercent:F2}%   {mark}");
-            listBox1.SelectedIndex = listBox1.Items.Count - 1;
-
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                toolStripStatusLabel1.Text = "All parallel games completed!";
-                button4.Text = "Parallel Play";
-                _isParallelSelfPlayRunning = false;
-            }
         });
+
+        // aggragate global stats to 1 final result
+        int red = 0, yellow = 0, draw = 0, total = 0;
+        foreach (var stat in globalStats.Values)
+        {
+            red += stat.Red;
+            yellow += stat.Yellow;
+            draw += stat.Draw;
+            total += stat.Total;
+        }
+
+        return (red, yellow, draw, total);
     }
 }

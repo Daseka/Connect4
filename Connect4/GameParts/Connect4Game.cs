@@ -55,6 +55,8 @@ public class Connect4Game
     public void ResetGame()
     {
         GameBoard.ResetBoard();
+
+        Winner = Winner.StillPlaying;
         CurrentPlayer = (int)Player.Red;
     }
 

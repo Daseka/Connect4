@@ -5,15 +5,118 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
-    private const int MaxBufferSize = 1000000;
+    private const int MaxBufferSize = 300000;
     private const string TelemetryHistoryFileName = "telemetry\\telemetry_history.json";
-    private readonly Queue<string> _insertionOrder = new();
-    private List<int[]> _boardState = [];
+
     private readonly Dictionary<string, List<double[]>> _policies = [];
     private readonly Random _random = new();
 
-    public Dictionary<string, BoardStateHistoricInfo> BoardStateHistoricalInfos { get; set; } = [];
-    public int Count { get; private set; }
+    public Queue<BoardStateHistoricInfo> BoardStateHistoricalInfos { get; set; } = [];
+    public int Count => BoardStateHistoricalInfos.Count;
+    public int NewEntries { get; set; } = 0;
+
+    public void BeginAddingNewEntries()
+    {
+        NewEntries = 0;
+    }
+
+    public void ClearAll()
+    {
+        _policies.Clear();
+        BoardStateHistoricalInfos.Clear();
+    }
+    
+    public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingDataRandom(int count = 0)
+    {
+        var all = BoardStateHistoricalInfos.ToList();
+        int finalCount = Math.Min(count, all.Count);
+        var chosen = new List<BoardStateHistoricInfo>(finalCount);
+
+        // Convert to arrays
+        var inputs = new double[finalCount][];
+        var policies = new double[finalCount][];
+        var values = new double[finalCount][];
+
+        for (int i = 0; i < finalCount; i++)
+        {
+            var info = all[Random.Shared.Next(finalCount)];
+            inputs[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+            policies[i] = [.. info.Policy];
+            values[i] = [info.RedWins, info.YellowWins, info.Draws];
+        }
+
+        return (inputs, policies, values);
+    }
+
+    public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingData(int count = 0)
+    {
+        var all = BoardStateHistoricalInfos.ToList();
+        int total = all.Count;
+
+        // Index where new entries begin
+        int startIndexOfNew = Math.Max(0, total - NewEntries);
+        int availableNew = total - startIndexOfNew;
+
+        // Desired total samples
+        int desired = count <= 0 ? total : Math.Min(count, total);
+
+        // Take as many new entries as will fit
+        int takeNew = Math.Min(availableNew, desired);
+
+        var chosen = new List<BoardStateHistoricInfo>(capacity: desired);
+
+        // Always include the most recent (takeNew) entries (preserve recency order)
+        for (int i = total - takeNew; i < total; i++)
+        {
+            chosen.Add(all[i]);
+        }
+
+        int remaining = desired - takeNew;
+
+        // If we still need more, sample from the older pool [0, startIndexOfNew)
+        if (remaining > 0 && startIndexOfNew > 0)
+        {
+            int oldPoolSize = startIndexOfNew;
+
+            if (oldPoolSize >= remaining)
+            {
+                // Sample without replacement
+                // Simple Fisher-Yates style partial shuffle
+                var indices = Enumerable.Range(0, oldPoolSize).ToArray();
+                for (int i = 0; i < remaining; i++)
+                {
+                    int swapWith = _random.Next(i, oldPoolSize);
+                    (indices[i], indices[swapWith]) = (indices[swapWith], indices[i]);
+                    chosen.Add(all[indices[i]]);
+                }
+            }
+            else
+            {
+                // Not enough distinct old entries, sample with replacement
+                for (int i = 0; i < remaining; i++)
+                {
+                    int idx = _random.Next(oldPoolSize);
+                    chosen.Add(all[idx]);
+                }
+            }
+        }
+
+        // Convert to arrays
+        int finalCount = chosen.Count;
+        var inputs = new double[finalCount][];
+        var policies = new double[finalCount][];
+        var values = new double[finalCount][];
+
+        for (int i = 0; i < finalCount; i++)
+        {
+            var info = chosen[i];
+            inputs[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+            policies[i] = [.. info.Policy];
+            values[i] = [info.RedWins, info.YellowWins, info.Draws];
+        }
+
+        return (inputs, policies, values);
+    }
 
     public void LoadFromFile()
     {
@@ -21,8 +124,6 @@ public class TelemetryHistory
 
         if (!File.Exists(TelemetryHistoryFileName))
         {
-            _boardState = [];
-
             return;
         }
 
@@ -30,103 +131,21 @@ public class TelemetryHistory
         TelemetryHistory? loaded = JsonConvert.DeserializeObject<TelemetryHistory>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
-
-        if (loaded != null)
-        {
-            foreach (var key in loaded.BoardStateHistoricalInfos.Keys)
-            {
-                _insertionOrder.Enqueue(key);
-            }
-            Count = BoardStateHistoricalInfos.Count;
-        }
     }
 
-    public Dictionary<string, BoardStateHistoricInfo> GetRepresentativeInfos(int minimumGameCount)
+    public void MergeFrom(TelemetryHistory other)
     {
-        Dictionary<string, BoardStateHistoricInfo> representativeInfos = [];
-        foreach (var info in BoardStateHistoricalInfos.Values)
+        if (other == null)
         {
-            if (info.RedWins + info.YellowWins + info.Draws >= minimumGameCount)
-            {
-                representativeInfos[info.BoardState] = info;
-            }
-        }
-        return representativeInfos;
-    }
-
-    public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingData(int count = 0, int minimumGameCount = 0)
-    {
-        Dictionary<string, BoardStateHistoricInfo> representativeInfos = GetRepresentativeInfos(minimumGameCount);
-        if (representativeInfos.Count == 0)
-        {
-            return (Array.Empty<double[]>(), Array.Empty<double[]>(), Array.Empty<double[]>());
+            return;
         }
 
-        int sampleCount = Math.Min(count, representativeInfos.Count);
-        string[] keys = [.. representativeInfos.Keys];
-
-        if (sampleCount == keys.Length)
+        foreach (BoardStateHistoricInfo info in other.BoardStateHistoricalInfos)
         {
-            double[][] trainingData = new double[sampleCount][];
-            double[][] expectedPolicies = new double[sampleCount][];
-            double[][] expectedValues = new double[sampleCount][];
-
-            var infos = representativeInfos.Values.ToArray();
-            for (int i = 0; i < infos.Length; i++)
-            {
-                var info = infos[i];
-                trainingData[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
-
-                double totalPolicies = info.Policy.Sum();
-                expectedPolicies[i] = [.. info.Policy.Select(p => Math.Round(p / totalPolicies, 8))];
-
-                double totalGames = info.RedWins + info.YellowWins + info.Draws;
-                expectedValues[i] = [
-                    Math.Round(info.RedWins / totalGames, 5),
-                    Math.Round(info.YellowWins / totalGames, 5),
-                    Math.Round(info.Draws / totalGames, 5)
-                ];
-            }
-
-            return (trainingData, expectedPolicies, expectedValues);
+            StoreInfo(info);
         }
 
-        List<string> randomKeys = RandomSample(keys, sampleCount);
-
-        double[][] sampledTrainingData = new double[sampleCount][];
-        double[][] sampledExpectedPolicies = new double[sampleCount][];
-        double[][] sampledExpectedValues = new double[sampleCount][];
-
-        for (int i = 0; i < sampleCount; i++)
-        {
-            BoardStateHistoricInfo info = representativeInfos[randomKeys[i]];
-            sampledTrainingData[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
-            
-            double totalPolicies = info.Policy.Sum();
-            sampledExpectedPolicies[i] = [.. info.Policy.Select(p => Math.Round(p / totalPolicies, 8))];
-
-            double totalGames = info.RedWins + info.YellowWins + info.Draws;
-            sampledExpectedValues[i] = [
-                Math.Round(info.RedWins / totalGames, 5),
-                    Math.Round(info.YellowWins / totalGames, 5),
-                    Math.Round(info.Draws / totalGames, 5)
-            ];
-        }
-
-        return (sampledTrainingData, sampledExpectedPolicies, sampledExpectedValues);
-    }
-
-    private List<string> RandomSample(string[] population, int sampleSize)
-    {
-        List<string> result = [.. population];
-
-        for (int i = 0; i < sampleSize; i++)
-        {
-            int j = _random.Next(i, result.Count);
-            (result[i], result[j]) = (result[j], result[i]);
-        }
-
-        return [.. result.Take(sampleSize)];
+        EnforceBufferLimit();
     }
 
     public void SaveToFile()
@@ -147,145 +166,53 @@ public class TelemetryHistory
         {
             _policies[BitKey.ToKey(state)] = [policy];
         }
-
-        _boardState.Add(state);
-        Count++;
-    }
-
-    public void ClearAll()
-    {
-        _boardState.Clear();
-        _policies.Clear();
-        BoardStateHistoricalInfos.Clear();
-        _insertionOrder.Clear();
-        Count = 0;
-    }
-
-    private void EnforceBufferLimit()
-    {
-        while (_insertionOrder.Count > MaxBufferSize)
-        {
-            string oldestKey = _insertionOrder.Dequeue();
-            BoardStateHistoricalInfos.Remove(oldestKey);
-        }
     }
 
     public void StoreWinnerData(Winner winner)
     {
-        foreach (int[] boardState in _boardState)
+        foreach (KeyValuePair<string, List<double[]>> item in _policies)
         {
-            string key = BitKey.ToKey(boardState);
-
-            if (!BoardStateHistoricalInfos.TryGetValue(key, out BoardStateHistoricInfo? value))
+            foreach (double[] policyValues in item.Value)
             {
-                value = new BoardStateHistoricInfo(key);
-                BoardStateHistoricalInfos[key] = value;
-
-                _insertionOrder.Enqueue(key);
-                EnforceBufferLimit();
-            }
-
-            if (_policies.TryGetValue(key, out List<double[]>? policies))
-            {
-                value.Policy = new double[policies.First().Length];
-                foreach (double[] policy in policies)
+                var info = new BoardStateHistoricInfo(item.Key)
                 {
-                    for (int i = 0; i < policy.Length; i++)
-                    {
-                        value.Policy[i] += policy[i];
-                    }
-                }
-            }
+                    Policy = [.. policyValues]
+                };
 
-            if (winner == Winner.Red)
-            {
-                value.RedWins++;
-            }
-            else if (winner == Winner.Yellow)
-            {
-                value.YellowWins++;
-            }
-            else if (winner == Winner.Draw)
-            {
-                value.Draws++;
+                if (winner == Winner.Red)
+                {
+                    info.RedWins = 1;
+                }
+                else if (winner == Winner.Yellow)
+                {
+                    info.YellowWins = 1;
+                }
+                else if (winner == Winner.Draw)
+                {
+                    info.Draws = 1;
+                }
+
+                StoreInfo(info);
             }
         }
 
-        _boardState.Clear();
+        EnforceBufferLimit();
+
         _policies.Clear();
     }
-    
-    public void MergeFrom(TelemetryHistory other)
-    {
-        if (other == null)
-        {
-            return;
-        }
 
-        foreach (var entry in other.BoardStateHistoricalInfos)
+    private void EnforceBufferLimit()
+    {
+        while (BoardStateHistoricalInfos.Count > MaxBufferSize)
         {
-            if (BoardStateHistoricalInfos.TryGetValue(entry.Key, out BoardStateHistoricInfo? existingInfo))
-            {
-                existingInfo.RedWins += entry.Value.RedWins;
-                existingInfo.YellowWins += entry.Value.YellowWins;
-                existingInfo.Draws += entry.Value.Draws;
-                
-                if (entry.Value.Policy != null && entry.Value.Policy.Length > 0)
-                {
-                    if (existingInfo.Policy == null || existingInfo.Policy.Length == 0)
-                    {
-                        existingInfo.Policy = entry.Value.Policy;
-                    }
-                    else if (existingInfo.Policy.Length == entry.Value.Policy.Length)
-                    {
-                        for (int i = 0; i < existingInfo.Policy.Length; i++)
-                        {
-                            existingInfo.Policy[i] = (existingInfo.Policy[i] + entry.Value.Policy[i]) / 2;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                var newInfo = new BoardStateHistoricInfo(entry.Key)
-                {
-                    RedWins = entry.Value.RedWins,
-                    YellowWins = entry.Value.YellowWins,
-                    Draws = entry.Value.Draws,
-                    Policy = entry.Value.Policy != null ? [.. entry.Value.Policy] : []
-                };
-                
-                BoardStateHistoricalInfos[entry.Key] = newInfo;
-                _insertionOrder.Enqueue(entry.Key);
-                Count++;
-                
-                EnforceBufferLimit();
-            }
+            BoardStateHistoricalInfos.Dequeue();
         }
-        
-        foreach (var state in other._boardState)
-        {
-            _boardState.Add([.. state]);
-        }
-        
-        foreach (var policy in other._policies)
-        {
-            if (_policies.TryGetValue(policy.Key, out List<double[]>? existingPolicy))
-            {
-                foreach (var p in policy.Value)
-                {
-                    existingPolicy.Add([.. p]);
-                }
-            }
-            else
-            {
-                var newPolicyList = new List<double[]>();
-                foreach (var p in policy.Value)
-                {
-                    newPolicyList.Add([.. p]);
-                }
-                _policies[policy.Key] = newPolicyList;
-            }
-        }
+    }
+
+    private void StoreInfo(BoardStateHistoricInfo info)
+    {
+        NewEntries++;
+
+        BoardStateHistoricalInfos.Enqueue(info);
     }
 }
