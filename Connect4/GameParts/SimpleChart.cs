@@ -26,6 +26,7 @@ namespace Connect4.GameParts
         public double YMin { get; set; } = 0;
         public double YMax { get; set; } = 100;
         public double DeepLearnThreshold { get; set; } = 55;
+        public List<bool> PositionsRedNetworkBetter { get; set; } = [];
 
         public SimpleChart()
         {
@@ -39,6 +40,12 @@ namespace Connect4.GameParts
             _yellowPoints.Add(yellowValue);
             _drawPoints.Add(drawValue);
             Invalidate();
+        }
+
+        public void Reset()
+        {
+            PositionsRedNetworkBetter.Clear();
+            ClearData();
         }
 
         public void ClearData()
@@ -161,7 +168,7 @@ namespace Connect4.GameParts
                 
                 for (int i = 0; i < redPoints.Length; i++)
                 {
-                    Color pointColor = _redPoints[i] > DeepLearnThreshold
+                    Color pointColor = PositionsRedNetworkBetter[i]
                         ? Color.FromArgb(0, 255, 0) 
                         : Color.FromArgb(255, 0, 0);
                     g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);

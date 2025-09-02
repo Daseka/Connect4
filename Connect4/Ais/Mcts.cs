@@ -35,7 +35,7 @@ public class Mcts(
         //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
         {
             Node? childNode = useNetworks
-                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor)
+                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, isDeterministic)
                 : Select(rootNode, _random, explorationFactor);
 
             double result = useNetworks
@@ -202,7 +202,12 @@ public class Mcts(
         return bestChild ?? node;
     }
 
-    private static Node Select(Node node, Random random, IStandardNetwork policyNetwork, double explorationFactor)
+    private static Node Select(
+        Node node, 
+        Random random, 
+        IStandardNetwork policyNetwork, 
+        double explorationFactor, 
+        bool isDeterministic)
     {
         if (node.IsTerminal)
         {
@@ -214,10 +219,10 @@ public class Mcts(
             return Expand(node, random);
         }
 
-        Node? bestChild = node.GetBestChild(policyNetwork, explorationFactor);
+        Node? bestChild = node.GetBestChild(policyNetwork, explorationFactor, random, isDeterministic);
         while (bestChild is not null && bestChild.Visits > 0 && !bestChild.IsTerminal)
         {
-            bestChild = Select(bestChild, random, policyNetwork, explorationFactor);
+            bestChild = Select(bestChild, random, policyNetwork, explorationFactor, isDeterministic);
         }
 
         return bestChild ?? node;

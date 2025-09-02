@@ -5,10 +5,10 @@ namespace Connect4.Ais;
 
 public class Node
 {
+    private const int MovesThreshold = 10;
     private double[]? _cachedProbability = null;
     private double[]? _cachedValue = null;
 
-    //private const double ExplorationConstant =0.8;
     public List<Node> Children { get; }
     public GameBoard GameBoard { get; }
     public bool IsTerminal { get; set; }
@@ -61,7 +61,7 @@ public class Node
         return bestChild;
     }
 
-    public Node? GetBestChild(IStandardNetwork policyNetwork, double explorationFactor)
+    public Node? GetBestChild(IStandardNetwork policyNetwork, double explorationFactor, Random random, bool isDeterministic)
     {
         double currentMaxUcb = double.MinValue;
         Node? bestChild = null;
@@ -69,7 +69,10 @@ public class Node
 
         double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard, ref _cachedProbability);
 
-        //DirchletNoise.AddNoise(policyProbability, random);
+        if (!isDeterministic)
+        {
+            DirchletNoise.AddNoise(policyProbability, random);
+        }
 
         foreach (Node node in Children)
         {
@@ -102,9 +105,12 @@ public class Node
             : Children[index];
     }
 
+    /// <summary>
+    /// If moves played higher than threshold or deterministic mode is on, then the most visited move is selected.
+    /// </summary>
     private int SelectMoveFromVisits(int[] visitCounts, int movesPlayed, bool isDeterministic)
     {
-        double temperature = movesPlayed < 8 ? 2 : 0;
+        double temperature = movesPlayed < MovesThreshold ? 2 : 0;
         
         if (temperature == 0 || isDeterministic)
         {
