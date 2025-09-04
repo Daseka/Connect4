@@ -17,6 +17,11 @@ namespace Connect4
         private Agent? _selectedAgent;
         private string _selectedGameMode = "Human vs Human";
 
+        private readonly Panel _historyPanel;
+        private readonly List<Bitmap> _boardStateHistory = [];
+
+        private readonly NumericUpDown _maxIterationsSelector;
+
         public SingleTabConnect4GameControl(Mcts mcts, AgentCatalog agentCatalog)
         {
             _mcts = mcts;
@@ -73,9 +78,66 @@ namespace Connect4
 
             LoadAgentsIntoRadioButtons(agentGroupBox);
             Controls.Add(agentGroupBox);
+
+            _historyPanel = new Panel
+            {
+                Location = new Point(1100, 11),
+                Size = new Size(250, 800),
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoScroll = true,
+            };
+            Controls.Add(_historyPanel);
+
+            _maxIterationsSelector = new NumericUpDown
+            {
+                Location = new Point(600, 350),
+                Size = new Size(200, 23),
+                Minimum = 400,
+                Maximum = 10000,
+                Value = 400,
+                Increment = 100,
+            };
+            _maxIterationsSelector.ValueChanged += MaxIterationsSelector_ValueChanged;
+            Controls.Add(_maxIterationsSelector);
         }
 
-        private static void EndGame(
+        private void MaxIterationsSelector_ValueChanged(object? sender, EventArgs e)
+        {
+            _mcts.MaxIterations = (int)_maxIterationsSelector.Value;
+        }
+
+        private void UpdateBoardStateHistory()
+        {
+            if (_boardStateHistory.Count == 5)
+            {
+                _boardStateHistory.RemoveAt(0);
+            }
+
+            var bitmap = new Bitmap(_pictureBox.Width, _pictureBox.Height);
+            _pictureBox.DrawToBitmap(bitmap, new Rectangle(0, 0, _pictureBox.Width, _pictureBox.Height));
+            _boardStateHistory.Add(bitmap);
+        }
+
+        private void DisplayBoardStateHistory()
+        {
+            _historyPanel.Controls.Clear();
+
+            int yOffset = 10;
+            foreach (var boardState in _boardStateHistory)
+            {
+                var pictureBox = new PictureBox
+                {
+                    Image = boardState,
+                    Size = new Size(180, 128),
+                    Location = new Point(10, yOffset),
+                    SizeMode = PictureBoxSizeMode.StretchImage,
+                };
+                _historyPanel.Controls.Add(pictureBox);
+                yOffset += 138;
+            }
+        }
+
+        private void EndGame(
             Connect4Game connect4Game,
             Mcts mcts,
             PictureBox pictureBox,
@@ -85,6 +147,8 @@ namespace Connect4
             connect4Game.ResetGame();
             pictureBox.Invoke(pictureBox.Refresh);
             moveHistory.Clear();
+
+            this.DisplayBoardStateHistory(); 
         }
 
         private static int PlacePieceClick(
@@ -154,9 +218,13 @@ namespace Connect4
 
         private void PerformAiMove()
         {
-            int aiMove = _mcts.GetBestMove(_game.GameBoard, _game.CurrentPlayer, 1.0, _moveHistory.Count).Result;
+            int aiMove = _mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true)
+                .GetAwaiter()
+                .GetResult();
             _game.PlacePieceColumn(aiMove);
             _pictureBox.Refresh();
+
+            UpdateBoardStateHistory();
 
             if (_game.GameBoard.HasWon(_game.CurrentPlayer))
             {
@@ -183,25 +251,24 @@ namespace Connect4
             var clickEvent = e as MouseEventArgs;
             int winner = PlacePieceClick(_game, clickEvent, _pictureBox);
 
+            UpdateBoardStateHistory();
+
             if (winner != 0)
             {
                 string color = winner == 1 ? "Red" : "Yellow";
                 _ = MessageBox.Show($"{color} Player wins!");
                 EndGame(_game, _mcts, _pictureBox, _moveHistory);
-                return;
             }
-
-            if (_game.GameBoard.HasDraw())
+            else if (_game.GameBoard.HasDraw())
             {
                 _ = MessageBox.Show("It's a draw!");
                 EndGame(_game, _mcts, _pictureBox, _moveHistory);
-                return;
             }
-
-            if (_selectedGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
+            else if (_selectedGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
             {
                 PerformAiMove();
             }
+
         }
 
         private void PictureBox_Paint(object? sender, PaintEventArgs e)
@@ -223,9 +290,11 @@ namespace Connect4
         {
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
-                int aiMove = await _mcts.GetBestMove(_game.GameBoard, _game.CurrentPlayer, 1.0, _moveHistory.Count);
+                int aiMove = await _mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
                 _game.PlacePieceColumn(aiMove);
                 _pictureBox.Refresh();
+
+                UpdateBoardStateHistory();
 
                 if (_game.GameBoard.HasWon(_game.CurrentPlayer))
                 {
