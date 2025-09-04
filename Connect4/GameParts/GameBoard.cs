@@ -8,6 +8,9 @@ public class GameBoard
     public const int Rows = 6;
     private const int CellStates = 3;
     private const int LastToPlay = 1;
+    const int LeftPadding = 50;
+    private const int CellHeight = 50;
+    private const int CellWidth = 50;
 
     public int[,] Board { get; private set; }
     public Player LastPlayed { get; private set; } = Player.None;
@@ -37,10 +40,7 @@ public class GameBoard
 
     public void DrawBoard(Graphics g)
     {
-        int cellWidth = 50;
-        int cellHeight = 50;
-
-        int paddingLeft = 150;
+        int paddingLeft = LeftPadding;
         int paddingTop = 10;
 
         for (int i = 0; i < Rows; i++)
@@ -56,10 +56,10 @@ public class GameBoard
 
                 if (_playedLocation[0] == i && _playedLocation[1] == j)
                 {
-                    g.FillEllipse(Brushes.Blue, paddingLeft - 4 + j * (cellWidth ), paddingTop - 4 + i * (cellHeight), cellWidth + 8, cellHeight + 8);
+                    g.FillEllipse(Brushes.Blue, paddingLeft - 4 + j * (CellWidth), paddingTop - 4 + i * (CellHeight), CellWidth + 10, CellHeight + 10);
                 }
 
-                g.FillEllipse(brush, paddingLeft + j * cellWidth, paddingTop + i * cellHeight, cellWidth, cellHeight);
+                g.FillEllipse(brush, paddingLeft + j * CellWidth, paddingTop + i * CellHeight, CellWidth, CellHeight);
             }
         }
     }
@@ -234,14 +234,10 @@ public class GameBoard
     {
         if (clickEvent == null)
         {
-            // Return an invalid index if the event is null
             return -1; 
         }
 
-        const int emptySpace = 300;
-        const int leftPadding = 150;
-        int columnWidth = (pictureBox1.Width - emptySpace) / Columns;
-        int columnIndex = (clickEvent.X - leftPadding) / columnWidth;
+        int columnIndex = Math.Min((clickEvent.X - LeftPadding) / CellWidth, (CellWidth * Columns) / CellWidth);
 
         return Math.Max(0, Math.Min(columnIndex, Columns - 1));
     }

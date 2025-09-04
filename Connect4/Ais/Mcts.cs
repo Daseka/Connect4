@@ -12,18 +12,18 @@ public class Mcts(
 {
     private const int MaxColumnCount = 7;
     private const double MinimumPolicyValue = 0.001;
-    private readonly int _maxIterations = maxIterations;
     private readonly Random _random = random ?? new();
     private readonly TelemetryHistory _telemetryHistory = new();
     private Node? _rootNode;
 
+    public int MaxIterations { get; set; } = maxIterations;
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
     public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
 
     public Task<int> GetBestMove(
-        GameBoard gameBoard, 
-        int previousPlayer, 
-        double explorationFactor, 
+        GameBoard gameBoard,
+        int previousPlayer,
+        double explorationFactor,
         int movesPlayed,
         bool isDeterministic = false)
     {
@@ -31,7 +31,7 @@ public class Mcts(
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
         var stopwatch = Stopwatch.StartNew();
-        for (int i = 0; i < _maxIterations; i++)
+        for (int i = 0; i < MaxIterations; i++)
         //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
         {
             Node? childNode = useNetworks
@@ -50,10 +50,9 @@ public class Mcts(
         var bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
         if (bestChild != null)
         {
-            //detach best child from parent to save memory
-            bestChild.Parent = null; 
+            bestChild.Parent = null;
         }
-        
+
         _rootNode = bestChild;
 
         return Task.FromResult(bestChild?.Move ?? -1);
@@ -100,7 +99,7 @@ public class Mcts(
             node.IsTerminal = true;
             return 0;
         }
-        
+
         double[] winProbability = node.GetValueCached(valueNetwork);
 
         return node.GameBoard.LastPlayed == Player.Red
@@ -203,10 +202,10 @@ public class Mcts(
     }
 
     private static Node Select(
-        Node node, 
-        Random random, 
-        IStandardNetwork policyNetwork, 
-        double explorationFactor, 
+        Node node,
+        Random random,
+        IStandardNetwork policyNetwork,
+        double explorationFactor,
         bool isDeterministic)
     {
         if (node.IsTerminal)

@@ -15,9 +15,7 @@ public partial class Form1 : Form
     private const int DeepLearningThreshold = 55;
     private const double ErrorConfidence = 1.96;
     private const double ExplorationConstant = 1.25;
-    private const int McstIterations = 10000;
-    private const string OldPolicyNetwork = "telemetry\\old_policy_network.json";
-    private const string OldValueNetwork = "telemetry\\old_value_network.json";
+    private const int McstIterations = 800;
     private const int SelfPlayGames = 100;
     private const string Unknown = "Random";
     private const int VsGames = 300;
@@ -63,15 +61,15 @@ public partial class Form1 : Form
                 var stopwatch = Stopwatch.StartNew();
                 await SelfPlayParallel(_currentAgent, SelfPlayGames);
                 stopwatch.Stop();
-                _ = BeginInvoke(() =>
-                {
-                    toolStripStatusLabel1.Text = $"Self play completed in {stopwatch.ElapsedMilliseconds} ms";
-                });
 
                 if (_arenaCancelationSource.IsCancellationRequested)
                 {
-                    _ = BeginInvoke(() => listBox1.Items.Add("Battle Arena cancelled."));
-                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                    _ = BeginInvoke(() =>
+                    {
+                        listBox1.Items.Add("Battle Arena cancelled.");
+                        listBox1.TopIndex = listBox1.Items.Count - 1;
+                    });
+
                     return;
                 }
 
@@ -80,6 +78,7 @@ public partial class Form1 : Form
                 trainedRedMcts = new Mcts(McstIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
                 _ = await TrainAsync(trainedRedMcts);
                 stopwatch.Stop();
+
                 _ = BeginInvoke(() =>
                 {
                     listBox1.Items.Add($"Training completed in {stopwatch.ElapsedMilliseconds} ms");
@@ -90,13 +89,13 @@ public partial class Form1 : Form
             skipTraining = false;
 
             // Evaluate the trained network against the current agent
-            var stopwatchEval = Stopwatch.StartNew();
+            var stopwatch2 = Stopwatch.StartNew();
             bool isBetter = await EvaluateAgent(trainedRedMcts);
+            stopwatch2.Stop();
 
-            stopwatchEval.Stop();
             _ = BeginInvoke(() =>
             {
-                listBox1.Items.Add($"Evaluation completed in {stopwatchEval.ElapsedMilliseconds} ms");
+                listBox1.Items.Add($"Evaluation completed in {stopwatch2.ElapsedMilliseconds} ms");
                 listBox1.TopIndex = listBox1.Items.Count - 1;
             });
 
@@ -420,7 +419,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
 
-        int sampleSize = _telemetryHistory.Count;//Math.Min(_telemetryHistory.Count, (int)Math.Round(_telemetryHistory.NewEntries * 2.0));
+        int sampleSize = _telemetryHistory.Count;
         int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize) * 2;
 
         double previousError = double.MaxValue;
@@ -439,7 +438,6 @@ public partial class Form1 : Form
         IStandardNetwork? tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
 
         int i = -1;
-        //for (int i = 0; i < steps; i++)
         string vStop = string.Empty;
         string pStop = string.Empty;
         while (i < steps || _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2)
@@ -764,12 +762,12 @@ public partial class Form1 : Form
 
         // aggragate global stats to 1 final result
         int red = 0, yellow = 0, draw = 0, total = 0;
-        foreach (var stat in globalStats.Values)
+        foreach (var (redWins, yellowWins, drawWins, totalWins) in globalStats.Values)
         {
-            red += stat.redWins;
-            yellow += stat.yellowWins;
-            draw += stat.drawWins;
-            total += stat.totalWins;
+            red += redWins;
+            yellow += yellowWins;
+            draw += drawWins;
+            total += totalWins;
         }
 
         return (red, yellow, draw, total);

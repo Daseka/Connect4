@@ -60,8 +60,7 @@ public partial class Form1 : Form
 
         IStandardNetwork valueNetwork = _currentAgent?.ValueNetwork ?? _oldValueNetwork;
         IStandardNetwork policyNetwork = _currentAgent?.PolicyNetwork ?? _oldPolicyNetwork;
-//        valueNetwork.Trained = true;
-//        policyNetwork.Trained = true;
+
         _yellowMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
         _redMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
 
@@ -97,8 +96,7 @@ public partial class Form1 : Form
 
         Resize += Form1_Resize;
 
-        var singleTabControl = new SingleTabConnect4GameControl(_redMcts);
-        singleTabControl.Dock = DockStyle.Fill;
+        var singleTabControl = new SingleTabConnect4GameControl(_redMcts, _agentCatalog) { Dock = DockStyle.Fill };
         tabPage3.Controls.Clear();
         tabPage3.Controls.Add(singleTabControl);
     }
@@ -231,17 +229,6 @@ public partial class Form1 : Form
         winPercentChart.ClearData();
     }
 
-    private void LoadButton_Click(object sender, EventArgs e)
-    {
-        _telemetryHistory.LoadFromFile();
-        _newValueNetwork = NetworkLoader.LoadNetwork(OldValueNetwork) ?? _newValueNetwork;
-        _newPolicyNetwork = NetworkLoader.LoadNetwork(OldPolicyNetwork) ?? _newPolicyNetwork;
-
-        _redMcts = new Mcts(McstIterations, _newValueNetwork, _newPolicyNetwork);
-
-        _ = MessageBox.Show("telemetry and network loaded successfully.");
-    }
-
     private void PictureBox1_Click(object? sender, EventArgs e)
     {
         var clickEvent = e as MouseEventArgs;
@@ -298,7 +285,7 @@ public partial class Form1 : Form
         _editorConnect4Game.SetState(textBox1.Text);
         pictureBox2.Refresh();
 
-        Text = $"LastPlayed {_editorConnect4Game.GameBoard.LastPlayed.ToString()}";
+        Text = $"LastPlayed {_editorConnect4Game.GameBoard.LastPlayed}";
     }
 
     private void ResetButton_Click(object sender, EventArgs e)
@@ -324,11 +311,5 @@ public partial class Form1 : Form
 
             _ = Task.Run(() => VsPlayParallel(_redMcts, _yellowMcts, McstIterations, explorationFactor: ExplorationConstant));
         }
-    }
-
-    private void TrainButton_Click(object sender, EventArgs e)
-    {
-        TrainAsync(_redMcts).GetAwaiter().GetResult();
-        TrainAsync(_yellowMcts).GetAwaiter().GetResult();
     }
 }
