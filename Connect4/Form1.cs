@@ -96,7 +96,7 @@ public partial class Form1 : Form
 
         Resize += Form1_Resize;
 
-        var singleTabControl = new SingleTabConnect4GameControl(_redMcts, _agentCatalog) { Dock = DockStyle.Fill };
+        var singleTabControl = new SingleTabConnect4GameControl( _agentCatalog) { Dock = DockStyle.Fill };
         tabPage3.Controls.Clear();
         tabPage3.Controls.Add(singleTabControl);
     }

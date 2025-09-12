@@ -7,24 +7,35 @@ namespace Connect4
     public class SingleTabConnect4GameControl : UserControl
     {
         private readonly AgentCatalog _agentCatalog;
+        private readonly List<Bitmap> _boardStateHistory = [];
         private readonly Connect4Game _game = new();
+
+        private readonly string[] _gameModes =
+        [
+            "Human vs Human",
+            "Human vs AI",
+            "AI vs AI"
+        ];
+
         private readonly ComboBox _gameModeSelector;
-        private readonly Mcts _mcts;
+        private readonly Panel _historyPanel;
+        private readonly NumericUpDown _maxIterationsSelector;
         private readonly Stack<string> _moveHistory = new();
         private readonly PictureBox _pictureBox;
+        private readonly GroupBox _redAgentGroupBox;
+        private readonly Mcts _redMcts;
         private readonly Button _resetButton;
         private readonly Button _undoButton;
+        private readonly GroupBox _yellowAgentGroupBox;
+        private readonly Mcts _yellowMcts;
         private Agent? _selectedAgent;
         private string _selectedGameMode = "Human vs Human";
 
-        private readonly Panel _historyPanel;
-        private readonly List<Bitmap> _boardStateHistory = [];
-
-        private readonly NumericUpDown _maxIterationsSelector;
-
-        public SingleTabConnect4GameControl(Mcts mcts, AgentCatalog agentCatalog)
+        public SingleTabConnect4GameControl(AgentCatalog agentCatalog)
         {
-            _mcts = mcts;
+            _yellowMcts = new Mcts(400);
+            _redMcts = new Mcts(400);
+
             _agentCatalog = agentCatalog;
             Dock = DockStyle.Fill;
 
@@ -41,14 +52,26 @@ namespace Connect4
 
             _gameModeSelector = new ComboBox
             {
-                Location = new Point(600, 311),
-                Size = new Size(200, 23),
+                Location = new Point(900, 55),
+                Size = new Size(160, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList,
             };
-            _gameModeSelector.Items.AddRange(["Human vs Human", "Human vs AI", "AI vs AI"]);
+            _gameModeSelector.Items.AddRange(_gameModes);
             _gameModeSelector.SelectedIndex = 0;
             _gameModeSelector.SelectedIndexChanged += GameModeSelector_SelectedIndexChanged;
             Controls.Add(_gameModeSelector);
+
+            _maxIterationsSelector = new NumericUpDown
+            {
+                Location = new Point(900, 80),
+                Size = new Size(160, 23),
+                Minimum = 400,
+                Maximum = 10000,
+                Value = 400,
+                Increment = 100,
+            };
+            _maxIterationsSelector.ValueChanged += MaxIterationsSelector_ValueChanged;
+            Controls.Add(_maxIterationsSelector);
 
             _resetButton = new Button
             {
@@ -68,16 +91,25 @@ namespace Connect4
             _undoButton.Click += UndoButton_Click;
             Controls.Add(_undoButton);
 
-            var agentGroupBox = new GroupBox
+            _redAgentGroupBox = new GroupBox
             {
-                Text = "Agents",
-                ForeColor = Color.White,
+                Text = "Red Agent",
+                ForeColor = Color.Red,
                 Location = new Point(600, 11),
-                Size = new Size(200, 300),
+                Size = new Size(200, 275),
             };
+            LoadAgentsIntoRadioButtons(_redAgentGroupBox, isRed: true);
+            Controls.Add(_redAgentGroupBox);
 
-            LoadAgentsIntoRadioButtons(agentGroupBox);
-            Controls.Add(agentGroupBox);
+            _yellowAgentGroupBox = new GroupBox
+            {
+                Text = "Yellow Agent",
+                ForeColor = Color.Yellow,
+                Location = new Point(600, 290),
+                Size = new Size(200, 275),
+            };
+            LoadAgentsIntoRadioButtons(_yellowAgentGroupBox, isRed: false);
+            Controls.Add(_yellowAgentGroupBox);
 
             _historyPanel = new Panel
             {
@@ -87,35 +119,23 @@ namespace Connect4
                 AutoScroll = true,
             };
             Controls.Add(_historyPanel);
-
-            _maxIterationsSelector = new NumericUpDown
-            {
-                Location = new Point(600, 350),
-                Size = new Size(200, 23),
-                Minimum = 400,
-                Maximum = 10000,
-                Value = 400,
-                Increment = 100,
-            };
-            _maxIterationsSelector.ValueChanged += MaxIterationsSelector_ValueChanged;
-            Controls.Add(_maxIterationsSelector);
         }
 
-        private void MaxIterationsSelector_ValueChanged(object? sender, EventArgs e)
+        private static int PlacePieceClick(
+            Connect4Game connect4Game,
+            MouseEventArgs? clickEvent,
+            PictureBox pictureBox)
         {
-            _mcts.MaxIterations = (int)_maxIterationsSelector.Value;
+            int winner = connect4Game.PlacePieceClick(clickEvent, pictureBox);
+            pictureBox.Invoke(pictureBox.Refresh);
+            return winner;
         }
 
-        private void UpdateBoardStateHistory()
+        private static void ResetGameState(Connect4Game game, Stack<string> moveHistory, PictureBox pictureBox)
         {
-            if (_boardStateHistory.Count == 5)
-            {
-                _boardStateHistory.RemoveAt(0);
-            }
-
-            var bitmap = new Bitmap(_pictureBox.Width, _pictureBox.Height);
-            _pictureBox.DrawToBitmap(bitmap, new Rectangle(0, 0, _pictureBox.Width, _pictureBox.Height));
-            _boardStateHistory.Add(bitmap);
+            game.ResetGame();
+            moveHistory.Clear();
+            pictureBox.Refresh();
         }
 
         private void DisplayBoardStateHistory()
@@ -148,37 +168,7 @@ namespace Connect4
             pictureBox.Invoke(pictureBox.Refresh);
             moveHistory.Clear();
 
-            this.DisplayBoardStateHistory(); 
-        }
-
-        private static int PlacePieceClick(
-            Connect4Game connect4Game,
-            MouseEventArgs? clickEvent,
-            PictureBox pictureBox)
-        {
-            int winner = connect4Game.PlacePieceClick(clickEvent, pictureBox);
-            pictureBox.Invoke(pictureBox.Refresh);
-            return winner;
-        }
-
-        private static void ResetGameState(Connect4Game game, Stack<string> moveHistory, PictureBox pictureBox)
-        {
-            game.ResetGame();
-            moveHistory.Clear();
-            pictureBox.Refresh();
-        }
-
-        private void AgentRadioButton_CheckedChanged(object? sender, EventArgs e)
-        {
-            if (sender is RadioButton radioButton && radioButton.Checked)
-            {
-                _selectedAgent = radioButton.Tag as Agent;
-                if (_selectedAgent != null)
-                {
-                    _mcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
-                    _mcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
-                }
-            }
+            this.DisplayBoardStateHistory();
         }
 
         private void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
@@ -186,7 +176,7 @@ namespace Connect4
             _selectedGameMode = _gameModeSelector.SelectedItem?.ToString() ?? "Human vs Human";
         }
 
-        private void LoadAgentsIntoRadioButtons(GroupBox agentGroupBox)
+        private void LoadAgentsIntoRadioButtons(GroupBox agentGroupBox, bool isRed)
         {
             _agentCatalog.LoadCatalog();
             var agents = _agentCatalog.Entries.Values;
@@ -202,7 +192,10 @@ namespace Connect4
                     AutoSize = true,
                     Tag = agent,
                 };
-                radioButton.CheckedChanged += AgentRadioButton_CheckedChanged;
+                radioButton.CheckedChanged += isRed
+                    ? RedAgentRadioButton_CheckedChanged
+                    : YellowAgentRadioButton_CheckedChanged;
+
                 agentGroupBox.Controls.Add(radioButton);
                 y += 25;
             }
@@ -216,9 +209,15 @@ namespace Connect4
             }
         }
 
-        private void PerformAiMove()
+        private void MaxIterationsSelector_ValueChanged(object? sender, EventArgs e)
         {
-            int aiMove = _mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true)
+            _yellowMcts.MaxIterations = (int)_maxIterationsSelector.Value;
+            _redMcts.MaxIterations = (int)_maxIterationsSelector.Value;
+        }
+
+        private void PerformAiMove(Mcts mcts)
+        {
+            int aiMove = mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true)
                 .GetAwaiter()
                 .GetResult();
             _game.PlacePieceColumn(aiMove);
@@ -230,12 +229,12 @@ namespace Connect4
             {
                 string color = _game.CurrentPlayer == 1 ? "Red" : "Yellow";
                 _ = MessageBox.Show($"{color} Player wins!");
-                EndGame(_game, _mcts, _pictureBox, _moveHistory);
+                EndGame(_game, mcts, _pictureBox, _moveHistory);
             }
             else if (_game.GameBoard.HasDraw())
             {
                 _ = MessageBox.Show("It's a draw!");
-                EndGame(_game, _mcts, _pictureBox, _moveHistory);
+                EndGame(_game, mcts, _pictureBox, _moveHistory);
             }
         }
 
@@ -253,27 +252,40 @@ namespace Connect4
 
             UpdateBoardStateHistory();
 
+            var mcts = _game.CurrentPlayer == 1 ? _redMcts : _yellowMcts;
             if (winner != 0)
             {
                 string color = winner == 1 ? "Red" : "Yellow";
                 _ = MessageBox.Show($"{color} Player wins!");
-                EndGame(_game, _mcts, _pictureBox, _moveHistory);
+                EndGame(_game, mcts, _pictureBox, _moveHistory);
             }
             else if (_game.GameBoard.HasDraw())
             {
                 _ = MessageBox.Show("It's a draw!");
-                EndGame(_game, _mcts, _pictureBox, _moveHistory);
+                EndGame(_game, mcts, _pictureBox, _moveHistory);
             }
             else if (_selectedGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
             {
-                PerformAiMove();
+                PerformAiMove(mcts);
             }
-
         }
 
         private void PictureBox_Paint(object? sender, PaintEventArgs e)
         {
             _game.DrawBoard(e.Graphics);
+        }
+
+        private void RedAgentRadioButton_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (sender is RadioButton radioButton && radioButton.Checked)
+            {
+                _selectedAgent = radioButton.Tag as Agent;
+                if (_selectedAgent != null)
+                {
+                    _redMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
+                    _redMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
+                }
+            }
         }
 
         private void ResetButton_Click(object? sender, EventArgs e)
@@ -288,9 +300,11 @@ namespace Connect4
 
         private async void StartAiVsAiGame()
         {
+            Mcts mcts;
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
-                int aiMove = await _mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+                mcts = _game.CurrentPlayer == 1 ? _redMcts : _yellowMcts;
+                int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
                 _game.PlacePieceColumn(aiMove);
                 _pictureBox.Refresh();
 
@@ -300,14 +314,14 @@ namespace Connect4
                 {
                     string color = _game.CurrentPlayer == 1 ? "Red" : "Yellow";
                     _ = MessageBox.Show($"{color} Player wins!");
-                    EndGame(_game, _mcts, _pictureBox, _moveHistory);
+                    EndGame(_game, mcts, _pictureBox, _moveHistory);
                     break;
                 }
 
                 if (_game.GameBoard.HasDraw())
                 {
                     _ = MessageBox.Show("It's a draw!");
-                    EndGame(_game, _mcts, _pictureBox, _moveHistory);
+                    EndGame(_game, mcts, _pictureBox, _moveHistory);
                     break;
                 }
             }
@@ -321,6 +335,31 @@ namespace Connect4
                 _game.SetState(prevState);
                 _game.CurrentPlayer = _game.CurrentPlayer == 1 ? 2 : 1;
                 _pictureBox.Refresh();
+            }
+        }
+
+        private void UpdateBoardStateHistory()
+        {
+            if (_boardStateHistory.Count == 5)
+            {
+                _boardStateHistory.RemoveAt(0);
+            }
+
+            var bitmap = new Bitmap(_pictureBox.Width, _pictureBox.Height);
+            _pictureBox.DrawToBitmap(bitmap, new Rectangle(0, 0, _pictureBox.Width, _pictureBox.Height));
+            _boardStateHistory.Add(bitmap);
+        }
+
+        private void YellowAgentRadioButton_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (sender is RadioButton radioButton && radioButton.Checked)
+            {
+                _selectedAgent = radioButton.Tag as Agent;
+                if (_selectedAgent != null)
+                {
+                    _yellowMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
+                    _yellowMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
+                }
             }
         }
     }
