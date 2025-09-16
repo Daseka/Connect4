@@ -14,6 +14,7 @@ namespace Connect4
         [
             "Human vs Human",
             "Human vs AI",
+            "AI vs Human",
             "AI vs AI"
         ];
 
@@ -174,11 +175,18 @@ namespace Connect4
         private void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
         {
             _selectedGameMode = _gameModeSelector.SelectedItem?.ToString() ?? "Human vs Human";
+            // If AI vs Human is selected and game is fresh, let AI start
+            if (_selectedGameMode == "AI vs Human")
+            {
+                if (_moveHistory.Count == 0 && _game.CurrentPlayer == 1)
+                {
+                    PerformAiMove(_redMcts); // AI (Red) starts
+                }
+            }
         }
 
         private void LoadAgentsIntoRadioButtons(GroupBox agentGroupBox, bool isRed)
         {
-            _agentCatalog.LoadCatalog();
             var agents = _agentCatalog.Entries.Values;
             agentGroupBox.Controls.Clear();
 
@@ -240,8 +248,9 @@ namespace Connect4
 
         private void PictureBox_Click(object? sender, EventArgs e)
         {
-            if (_selectedGameMode == "AI vs AI")
+            if (_selectedGameMode == "AI vs AI" || (_selectedGameMode == "AI vs Human" && _game.CurrentPlayer == 1))
             {
+                // Ignore clicks when it's AI's turn in AI vs Human mode
                 return;
             }
 
@@ -267,6 +276,14 @@ namespace Connect4
             else if (_selectedGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
             {
                 PerformAiMove(mcts);
+            }
+            else if (_selectedGameMode == "AI vs Human")
+            {
+                // Let AI keep playing until it's the human's turn or the game ends
+                while (_game.CurrentPlayer == 1 && _game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
+                {
+                    PerformAiMove(_redMcts);
+                }
             }
         }
 
@@ -295,6 +312,11 @@ namespace Connect4
             if (_selectedGameMode == "AI vs AI")
             {
                 StartAiVsAiGame();
+            }
+            else if (_selectedGameMode == "AI vs Human")
+            {
+                // AI (Red) starts
+                PerformAiMove(_redMcts);
             }
         }
 

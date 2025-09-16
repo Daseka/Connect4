@@ -97,7 +97,7 @@ public class Mcts(
         if (node.GameBoard.HasDraw())
         {
             node.IsTerminal = true;
-            return 0.5;
+            return 0;
         }
 
         double[] winProbability = node.GetValueCached(valueNetwork);

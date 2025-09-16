@@ -25,7 +25,68 @@ public class TelemetryHistory
         _policies.Clear();
         BoardStateHistoricalInfos.Clear();
     }
-    
+
+    public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingDataRandomAveragedNewFirst(int count = 0)
+    {
+        var all = BoardStateHistoricalInfos.ToList();
+        int finalCount = Math.Min(count, all.Count);
+
+        var valueStatsForBoardState = new Dictionary<string, (int redWins, int yellowWins, int draws, int total)>();
+        var sampledInfos = new BoardStateHistoricInfo[finalCount];
+
+        for (int i = 0; i < finalCount; i++)
+        {
+            var info = all[Random.Shared.Next(finalCount)];
+            sampledInfos[i] = info;
+
+            if (!valueStatsForBoardState.TryGetValue(info.BoardState, out var stats))
+            {
+                stats = (0, 0, 0, 0);
+            }
+
+            stats.redWins += info.RedWins;
+            stats.yellowWins += info.YellowWins;
+            stats.draws += info.Draws;
+            stats.total += 1;
+            valueStatsForBoardState[info.BoardState] = stats;
+        }
+
+        var boardStateValues = new Dictionary<string, double[]>(valueStatsForBoardState.Count);
+        foreach (var kvp in valueStatsForBoardState)
+        {
+            var stats = kvp.Value;
+            double total = stats.total;
+            boardStateValues[kvp.Key] =
+            [
+                stats.redWins / total,
+                stats.yellowWins / total,
+                stats.draws / total
+            ];
+        }
+
+        var inputs = new double[finalCount][];
+        var policies = new double[finalCount][];
+        var values = new double[finalCount][];
+
+        for (int i = 0; i < finalCount; i++)
+        {
+            var info = sampledInfos[i];
+            inputs[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+            policies[i] = [.. info.Policy];
+
+            var stats = valueStatsForBoardState[info.BoardState];
+            double total = stats.total;
+            values[i] =
+            [
+                stats.redWins / total,
+                stats.yellowWins / total,
+                stats.draws / total
+            ];
+        }
+
+        return (inputs, policies, values);
+    }
+
     public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingDataRandom(int count = 0)
     {
         var all = BoardStateHistoricalInfos.ToList();
@@ -53,35 +114,26 @@ public class TelemetryHistory
         var all = BoardStateHistoricalInfos.ToList();
         int total = all.Count;
 
-        // Index where new entries begin
         int startIndexOfNew = Math.Max(0, total - NewEntries);
         int availableNew = total - startIndexOfNew;
-
-        // Desired total samples
         int desired = count <= 0 ? total : Math.Min(count, total);
-
-        // Take as many new entries as will fit
         int takeNew = Math.Min(availableNew, desired);
+        var chosen = new List<BoardStateHistoricInfo>(desired);
 
-        var chosen = new List<BoardStateHistoricInfo>(capacity: desired);
-
-        // Always include the most recent (takeNew) entries (preserve recency order)
+        // Always include the most recent entries
         for (int i = total - takeNew; i < total; i++)
         {
             chosen.Add(all[i]);
         }
 
         int remaining = desired - takeNew;
-
-        // If we still need more, sample from the older pool [0, startIndexOfNew)
         if (remaining > 0 && startIndexOfNew > 0)
         {
             int oldPoolSize = startIndexOfNew;
-
+            
             if (oldPoolSize >= remaining)
             {
-                // Sample without replacement
-                // Simple Fisher-Yates style partial shuffle
+                // randomly sample from old entries
                 var indices = Enumerable.Range(0, oldPoolSize).ToArray();
                 for (int i = 0; i < remaining; i++)
                 {
@@ -92,27 +144,67 @@ public class TelemetryHistory
             }
             else
             {
-                // Not enough distinct old entries, sample with replacement
                 for (int i = 0; i < remaining; i++)
                 {
-                    int idx = _random.Next(oldPoolSize);
-                    chosen.Add(all[idx]);
+                    int index = _random.Next(oldPoolSize);
+                    chosen.Add(all[index]);
                 }
             }
         }
 
-        // Convert to arrays
         int finalCount = chosen.Count;
+
+        var valueStatsForBoardState = new Dictionary<string, (int redWins, int yellowWins, int draws, int total)>();
+        var sampledInfos = new BoardStateHistoricInfo[finalCount];
+
+        for (int i = 0; i < finalCount; i++)
+        {
+            var info = chosen[i];
+            sampledInfos[i] = info;
+
+            if (!valueStatsForBoardState.TryGetValue(info.BoardState, out var stats))
+            {
+                stats = (0, 0, 0, 0);
+            }
+
+            stats.redWins += info.RedWins;
+            stats.yellowWins += info.YellowWins;
+            stats.draws += info.Draws;
+            stats.total += 1;
+            valueStatsForBoardState[info.BoardState] = stats;
+        }
+
+        var boardStateValues = new Dictionary<string, double[]>(valueStatsForBoardState.Count);
+        foreach (var kvp in valueStatsForBoardState)
+        {
+            var stats = kvp.Value;
+            double valueTotal = stats.total;
+            boardStateValues[kvp.Key] =
+            [
+                stats.redWins / valueTotal,
+                stats.yellowWins / valueTotal,
+                stats.draws / valueTotal
+            ];
+        }
+
         var inputs = new double[finalCount][];
         var policies = new double[finalCount][];
         var values = new double[finalCount][];
 
         for (int i = 0; i < finalCount; i++)
         {
-            var info = chosen[i];
+            var info = sampledInfos[i];
             inputs[i] = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
             policies[i] = [.. info.Policy];
-            values[i] = [info.RedWins, info.YellowWins, info.Draws];
+
+            var stats = valueStatsForBoardState[info.BoardState];
+            double valueTotal = stats.total;
+            values[i] =
+            [
+                stats.redWins / valueTotal,
+                stats.yellowWins / valueTotal,
+                stats.draws / valueTotal
+            ];
         }
 
         return (inputs, policies, values);

@@ -26,6 +26,9 @@ public partial class Form1 : Form
     private Mcts _redMcts;
     private Mcts _yellowMcts;
 
+    private readonly int[] valueArray = [127, 256, 128, 64, 3];
+    private readonly int[] policyArray = [127, 256, 128, 64, 7];
+
     public Form1()
     {
         InitializeComponent();
@@ -41,10 +44,10 @@ public partial class Form1 : Form
         bool useMiniBatchNetwork = true;
         if (useMiniBatchNetwork)
         {
-            _oldValueNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 3]);
-            _oldPolicyNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 7]);
-            _newValueNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 3]);
-            _newPolicyNetwork = new MiniBatchMatrixNetwork([127, 256, 128, 64, 7]);
+            _oldValueNetwork = new MiniBatchMatrixNetwork(valueArray);
+            _oldPolicyNetwork = new MiniBatchMatrixNetwork(policyArray);
+            _newValueNetwork = new MiniBatchMatrixNetwork(valueArray);
+            _newPolicyNetwork = new MiniBatchMatrixNetwork(policyArray);
         }
         else
         {

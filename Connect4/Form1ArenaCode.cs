@@ -16,9 +16,10 @@ public partial class Form1 : Form
     private const double ErrorConfidence = 1.96;
     private const double ExplorationConstant = 1.25;
     private const int McstIterations = 800;
-    private const int SelfPlayGames = 100;
+    private const int SelfPlayGames = 50;
     private const string Unknown = "Random";
     private const int VsGames = 300;
+    private const int MovingAverageSize = 30;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -432,6 +433,8 @@ public partial class Form1 : Form
         int consecutiveIncreasesError2 = 0;
         double error = 0;
         double error2 = 0;
+        double clonedAtError = 0;
+        double clonedAtError2 = 0;
         bool stopEarly = false;
         bool stopEarly2 = false;
         IStandardNetwork? tempValueNetwork = mcts.ValueNetwork!.Clone();
@@ -444,8 +447,9 @@ public partial class Form1 : Form
         {
             i++;
 
+            // Get all new entries plus a little bit of the old entries
             (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
-                .GetTrainingDataRandom(MiniBatchNetworkTrainer.BatchSize);
+                .GetTrainingData((int)(_telemetryHistory.NewEntries * 1.20));
 
             if (!stopEarly)
             {
@@ -466,13 +470,13 @@ public partial class Form1 : Form
                 listBox1.TopIndex = listBox1.Items.Count - 1;
             });
 
-            if (errorHistory.Count == 50)
+            if (errorHistory.Count == MovingAverageSize)
             {
                 errorHistory.Dequeue();
             }
             errorHistory.Enqueue(error);
 
-            if (error2History.Count == 50)
+            if (error2History.Count == MovingAverageSize)
             {
                 error2History.Dequeue();
             }
@@ -489,6 +493,7 @@ public partial class Form1 : Form
             else if (!stopEarly)
             {
                 tempValueNetwork = mcts.ValueNetwork!.Clone();
+                clonedAtError = error;
                 consecutiveIncreasesError = 0;
             }
 
@@ -499,11 +504,12 @@ public partial class Form1 : Form
             else if (!stopEarly2)
             {
                 tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
+                clonedAtError2 = error2;
                 consecutiveIncreasesError2 = 0;
             }
 
             // only start checking for early stoping after a few steps to allow some initial training
-            if (i > 30)
+            if (i > MovingAverageSize)
             {
                 previousMovingAverageError = movingAverageError;
                 previousMovingAverageError2 = movingAverageError2;
@@ -545,8 +551,11 @@ public partial class Form1 : Form
         mcts.ValueNetwork = tempValueNetwork;
 
         string y = $"Current agent is {_currentAgent?.Id ?? "None"} generation: {_currentAgent?.Generation ?? 0}";
+        string clonedErrors = $"Cloned error at V:{Math.Round(clonedAtError, 8):F8} P:{Math.Round(clonedAtError2, 8):F8}";
         Invoke(() =>
         {
+            _ = listBox1.Items.Add(string.Empty);
+            _ = listBox1.Items.Add(clonedErrors);
             _ = listBox1.Items.Add(vStop);
             _ = listBox1.Items.Add(pStop);
             _ = listBox1.Items.Add($"Total boarstates trained {MiniBatchNetworkTrainer.BatchSize * i}");
