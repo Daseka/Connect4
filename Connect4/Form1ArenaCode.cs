@@ -14,12 +14,13 @@ public partial class Form1 : Form
     private const int BossWinStreakMaximum = 5;
     private const int DeepLearningThreshold = 55;
     private const double ErrorConfidence = 1.96;
-    private const double ExplorationConstant = 1.25;
+    private const double ExplorationConstant = 1.40;
     private const int McstIterations = 800;
-    private const int SelfPlayGames = 50;
+    private const int MovingAverageSize = 20;
+    private const int SelfPlayGames = 300;
     private const string Unknown = "Random";
     private const int VsGames = 300;
-    private const int MovingAverageSize = 30;
+    private const int ConsecutiveIncreaseLimit = 2;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -423,22 +424,29 @@ public partial class Form1 : Form
         int sampleSize = _telemetryHistory.Count;
         int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize) * 2;
 
-        double previousError = double.MaxValue;
-        double previousError2 = double.MaxValue;
-        var errorHistory = new Queue<double>();
-        var error2History = new Queue<double>();
-        double? previousMovingAverageError = null;
-        double? previousMovingAverageError2 = null;
-        int consecutiveIncreasesError = 0;
-        int consecutiveIncreasesError2 = 0;
-        double error = 0;
-        double error2 = 0;
-        double clonedAtError = 0;
-        double clonedAtError2 = 0;
-        bool stopEarly = false;
-        bool stopEarly2 = false;
+        double previousValueError = double.MaxValue;
+        double previousPolicyError = double.MaxValue;
+        var valueErrorHistory = new Queue<double>();
+        var policyErrorHistory = new Queue<double>();
+        double? previousMovingAverageValueError = double.MaxValue;
+        double? previousMovingAveragePolicyError = double.MaxValue;
+        int consecutiveIncreasesValueError = 0;
+        int consecutiveIncreasesPolicyError = 0;
+        double valueError = 0;
+        double policyError = 0;
+        double clonedAtValueError = 0;
+        double clonedAtPolicyError = 0;
+        bool valueStopEarly = false;
+        bool policyStopEarly = false;
         IStandardNetwork? tempValueNetwork = mcts.ValueNetwork!.Clone();
         IStandardNetwork? tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
+
+        int movingAveragePolicy= _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2
+            ? MovingAverageSize * 4
+            : MovingAverageSize;
+
+        // moving average for value is larger because it fluctuates more
+        int movingAverageValue = movingAveragePolicy * 2;
 
         int i = -1;
         string vStop = string.Empty;
@@ -447,75 +455,85 @@ public partial class Form1 : Form
         {
             i++;
 
-            // Get all new entries plus a little bit of the old entries
+            // Get all new entries plus a little bit of the old entries or a random sample of the entire history
+            //(double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = Random.Shared.NextBoolean()
+            //    ? telemetryHistory.GetTrainingDataRandom(_telemetryHistory.NewEntries)
+            //    : telemetryHistory.GetTrainingDataNewFirst(_telemetryHistory.NewEntries);
+
+            // Get all new entries plus a little bit of the old entries or a random sample of the entire history
             (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
-                .GetTrainingData((int)(_telemetryHistory.NewEntries * 1.20));
+                .GetTrainingDataNewFirst((int)(_telemetryHistory.NewEntries * 2));
 
-            if (!stopEarly)
+            if (!valueStopEarly)
             {
-                error = valueTrainer.Train(trainingData, valueExpectedData);
+                valueError = valueTrainer.Train(trainingData, valueExpectedData);
             }
 
-            if (!stopEarly2)
+            if (!policyStopEarly)
             {
-                error2 = policyTrainer.Train(trainingData, policyExpectedData);
+                policyError = policyTrainer.Train(trainingData, policyExpectedData);
             }
 
-            string arrow = error > previousError ? "🡹" : "🡻";
-            string arrow2 = error2 > previousError2 ? "🡹" : "🡻";
+            string valueArrow = valueError > previousValueError ? "🡹" : "🡻";
+            string policyArrow = policyError > previousPolicyError ? "🡹" : "🡻";
 
             Invoke(() =>
             {
-                _ = listBox1.Items.Add($"V:Error {Math.Round(error, 8):F8} {arrow} \t P:Error {Math.Round(error2, 8):F8} {arrow2}\t Step {i}");
+                _ = listBox1.Items.Add($"V:Error {Math.Round(valueError, 8):F8} {valueArrow} \t P:Error {Math.Round(policyError, 8):F8} {policyArrow}\t Step {i}");
                 listBox1.TopIndex = listBox1.Items.Count - 1;
             });
 
-            if (errorHistory.Count == MovingAverageSize)
+            //multiply by 2 because value fluctuates more
+            if (valueErrorHistory.Count == movingAverageValue)
             {
-                errorHistory.Dequeue();
+                valueErrorHistory.Dequeue();
             }
-            errorHistory.Enqueue(error);
+            valueErrorHistory.Enqueue(valueError);
 
-            if (error2History.Count == MovingAverageSize)
+            if (policyErrorHistory.Count == movingAveragePolicy)
             {
-                error2History.Dequeue();
+                policyErrorHistory.Dequeue();
             }
-            error2History.Enqueue(error2);
-
-            // Calculate moving averages
-            double movingAverageError = errorHistory.Average();
-            double movingAverageError2 = error2History.Average();
-
-            if (previousMovingAverageError.HasValue && movingAverageError > previousMovingAverageError)
-            {
-                consecutiveIncreasesError++;
-            }
-            else if (!stopEarly)
-            {
-                tempValueNetwork = mcts.ValueNetwork!.Clone();
-                clonedAtError = error;
-                consecutiveIncreasesError = 0;
-            }
-
-            if (previousMovingAverageError2.HasValue && movingAverageError2 > previousMovingAverageError2)
-            {
-                consecutiveIncreasesError2++;
-            }
-            else if (!stopEarly2)
-            {
-                tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
-                clonedAtError2 = error2;
-                consecutiveIncreasesError2 = 0;
-            }
+            policyErrorHistory.Enqueue(policyError);
 
             // only start checking for early stoping after a few steps to allow some initial training
-            if (i > MovingAverageSize)
+            if (i > movingAverageValue)
             {
-                previousMovingAverageError = movingAverageError;
-                previousMovingAverageError2 = movingAverageError2;
+                double movingAverageValueError = valueErrorHistory.Average();
+
+                if (movingAverageValueError > previousMovingAverageValueError)
+                {
+                    consecutiveIncreasesValueError++;
+                }
+                else if (!valueStopEarly)
+                {
+                    tempValueNetwork = mcts.ValueNetwork!.Clone();
+                    clonedAtValueError = valueError;
+                    consecutiveIncreasesValueError = 0;
+                }
+
+                previousMovingAverageValueError = movingAverageValueError;
             }
 
-            if (!stopEarly && consecutiveIncreasesError >= 2)
+            if (i > movingAveragePolicy)
+            {
+                double movingAveragePolicyError = policyErrorHistory.Average();
+
+                if (movingAveragePolicyError > previousMovingAveragePolicyError)
+                {
+                    consecutiveIncreasesPolicyError++;
+                }
+                else if (!policyStopEarly)
+                {
+                    tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
+                    clonedAtPolicyError = policyError;
+                    consecutiveIncreasesPolicyError = 0;
+                }
+
+                previousMovingAveragePolicyError = movingAveragePolicyError;
+            }
+
+            if (!valueStopEarly && consecutiveIncreasesValueError >= ConsecutiveIncreaseLimit)
             {
                 Invoke(() =>
                 {
@@ -523,11 +541,10 @@ public partial class Form1 : Form
                     _ = listBox1.Items.Add(vStop);
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
-                stopEarly = true;
+                valueStopEarly = true;
             }
 
-            // Break the loop if either moving average increases twice in a row
-            if (!stopEarly2 && consecutiveIncreasesError2 >= 2)
+            if (!policyStopEarly && consecutiveIncreasesPolicyError >= ConsecutiveIncreaseLimit)
             {
                 Invoke(() =>
                 {
@@ -535,23 +552,23 @@ public partial class Form1 : Form
                     _ = listBox1.Items.Add(pStop);
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
-                stopEarly2 = true;
+                policyStopEarly = true;
             }
 
-            if (stopEarly && stopEarly2)
+            if (valueStopEarly && policyStopEarly)
             {
                 break;
             }
 
-            previousError = error;
-            previousError2 = error2;
+            previousValueError = valueError;
+            previousPolicyError = policyError;
         }
 
         mcts.PolicyNetwork = tempPolicyNetwork;
         mcts.ValueNetwork = tempValueNetwork;
 
         string y = $"Current agent is {_currentAgent?.Id ?? "None"} generation: {_currentAgent?.Generation ?? 0}";
-        string clonedErrors = $"Cloned error at V:{Math.Round(clonedAtError, 8):F8} P:{Math.Round(clonedAtError2, 8):F8}";
+        string clonedErrors = $"Cloned error at V:{Math.Round(clonedAtValueError, 8):F8} P:{Math.Round(clonedAtPolicyError, 8):F8}";
         Invoke(() =>
         {
             _ = listBox1.Items.Add(string.Empty);

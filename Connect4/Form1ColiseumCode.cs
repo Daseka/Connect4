@@ -38,21 +38,21 @@ public partial class Form1 : Form
                 agent2.ValueNetwork.ExplorationFactor = agent2.ExplorationFactor;
                 agent2.PolicyNetwork.ExplorationFactor = agent2.ExplorationFactor;
 
-                var (red,yellow,draw,totals ) = await PlayGames(agent1, agent2, ColiseumGames / 2);
-                var redWins = red;
-                var drawWins = draw;
-                var totalWins = totals;
+                (int red, int yellow, int draw, int totals) = await PlayGames(agent1, agent2, ColiseumGames / 2);
+                int redWins = red;
+                int drawWins = draw;
+                int totalWins = totals;
 
                 (red, yellow, draw, totals)  = await PlayGames(agent2, agent1, ColiseumGames / 2);
                 redWins += yellow;
                 drawWins += draw;
                 totalWins += totals;
-                double _redWithDrawPercent = (redWins + (drawWins * 0.5)) / totalWins * 100.0;
+                double redWithDrawPercent = (redWins + (drawWins * 0.5)) / totalWins * 100.0;
 
                 _ = BeginInvoke(() =>
                 {
-                    string mark = _redWithDrawPercent > 50 ? "✔" : "╳";
-                    _ = listBox1.Items.Add($"{_redWithDrawPercent:F2}% \t Gen: {agent2.Generation}  {mark}");
+                    string mark = redWithDrawPercent > 50 ? "✔" : "╳";
+                    _ = listBox1.Items.Add($"{redWithDrawPercent:F2}% \t Gen: {agent2.Generation}  {mark}");
                     listBox1.SelectedIndex = listBox1.Items.Count - 1;
                 });
             }
@@ -211,7 +211,7 @@ public partial class Form1 : Form
             UpdateGlobalStats(globalStats, totalGames);
         });
 
-        // aggragate global stats to 1 final result
+        // aggregate global stats to 1 final result
         int red = 0, yellow = 0, draw = 0, total = 0;
         foreach (var stat in globalStats.Values)
         {

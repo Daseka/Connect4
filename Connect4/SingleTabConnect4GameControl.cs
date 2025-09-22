@@ -67,7 +67,7 @@ namespace Connect4
                 Location = new Point(900, 80),
                 Size = new Size(160, 23),
                 Minimum = 400,
-                Maximum = 10000,
+                Maximum = 100000,
                 Value = 400,
                 Increment = 100,
             };

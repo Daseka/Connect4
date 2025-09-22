@@ -102,9 +102,7 @@ public class Mcts(
 
         double[] winProbability = node.GetValueCached(valueNetwork);
 
-        return node.GameBoard.LastPlayed == Player.Red
-            ? winProbability[0]
-            : winProbability[1];
+        return winProbability[0];
     }
 
     private static Node Expand(Node node, Random random)

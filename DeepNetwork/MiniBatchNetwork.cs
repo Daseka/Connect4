@@ -53,6 +53,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
     public Matrix<double>[] Gradients { get; private set; }
     public double LastError { get; set; }
     public bool Trained { get; set; }
+    public bool Softmax { get; }
 
     static MiniBatchMatrixNetwork()
     {
@@ -60,9 +61,10 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         Control.UseNativeMKL();
     }
 
-    public MiniBatchMatrixNetwork(int[] structure, Func<int, IActivationFunction>? activationFactory = null)
+    public MiniBatchMatrixNetwork(int[] structure, bool isSoftmax)
     {
         _structure = structure;
+        Softmax = isSoftmax;
         int layers = structure.Length - 1;
 
         // Initialize flat arrays for fast inference
@@ -100,10 +102,10 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
         for (int i = 0; i < structure.Length; i++)
         {
-            _activations[i] = activationFactory?.Invoke(i) ?? (i == structure.Length - 1
+            _activations[i] = i == structure.Length - 1 && Softmax
                 //? new SigmoidActivationFunction()
                 ? new SoftMaxActivationFunction()
-                : new TanhActivationFunction());
+                : new TanhActivationFunction();
             //: new LeakyReLUActivationFunction());
         }
     }
@@ -129,8 +131,9 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         settings.Converters.Add(new DenseMatrixConverter());
         settings.Converters.Add(new DenseVectorConverter());
         int[] structure = jObject[nameof(_structure)]!.ToObject<int[]>()!;
+        bool isSoftmax = jObject[nameof(Softmax)]?.ToObject<bool>() ?? false;
 
-        var network = new MiniBatchMatrixNetwork(structure)
+        var network = new MiniBatchMatrixNetwork(structure, isSoftmax)
         {
             _weights = jObject[nameof(_weights)]!.ToObject<DenseMatrix[]>(JsonSerializer.Create(settings))!,
             _biases = jObject[nameof(_biases)]!.ToObject<DenseVector[]>(JsonSerializer.Create(settings))!,
@@ -202,7 +205,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     public IStandardNetwork Clone()
     {
-        var clone = new MiniBatchMatrixNetwork(_structure);
+        var clone = new MiniBatchMatrixNetwork(_structure, Softmax);
         for (int i = 0; i < _weights.Length; i++)
         {
             clone._weights[i] = _weights[i].Clone();
@@ -226,6 +229,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
         var wrapper = new
         {
+            Softmax,
             NetworkName,
             _weights,
             _structure,
