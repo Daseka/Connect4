@@ -1,6 +1,7 @@
 using Connect4.Ais;
 using Connect4.GameParts;
 using DeepNetwork.NetworkIO;
+using System.Net;
 
 namespace Connect4
 {
@@ -31,6 +32,7 @@ namespace Connect4
         private readonly Mcts _yellowMcts;
         private Agent? _selectedAgent;
         private string _selectedGameMode = "Human vs Human";
+        private GroupBox _remotConnectionGroupbox;
 
         public SingleTabConnect4GameControl(AgentCatalog agentCatalog)
         {
@@ -106,7 +108,7 @@ namespace Connect4
             {
                 Text = "Yellow Agent",
                 ForeColor = Color.Yellow,
-                Location = new Point(600, 290),
+                Location = new Point(600, 310),
                 Size = new Size(200, 300),
             };
             LoadAgentsIntoRadioButtons(_yellowAgentGroupBox, isRed: false);
@@ -120,6 +122,33 @@ namespace Connect4
                 AutoScroll = true,
             };
             Controls.Add(_historyPanel);
+
+            _remotConnectionGroupbox = new GroupBox
+            {
+                Text = "Remote Connection",
+                ForeColor = Color.White,
+                Location = new Point(100, 480),
+                Size = new Size(400, 100),
+            };
+            LoadRemoteComponents(_remotConnectionGroupbox);
+            Controls.Add(_remotConnectionGroupbox);
+        }
+
+        private void LoadRemoteComponents(GroupBox remotConnectionGroupbox)
+        {
+            IPAddress? v = Dns.GetHostAddresses(Dns.GetHostName())
+                .FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            string ipAddres = v?.ToString() ?? string.Empty;
+
+
+            var ipLabel = new Label
+            {
+                Text = $"My IP: {ipAddres}",
+                Location = new Point(10, 20),
+                AutoSize = true,
+                Font = new Font(FontFamily.GenericMonospace, 15, FontStyle.Bold),
+            };
+            remotConnectionGroupbox.Controls.Add(ipLabel);
         }
 
         private static int PlacePieceClick(
