@@ -173,7 +173,7 @@ namespace Connect4
             {
                 Location = new Point(200, 50),
                 Size = new Size(160, 23),
-                Text = "192.168.2.6:5000",
+                Text = "192.168.2.6:101",
             };
 
             remotConnectionGroupbox.Controls.Add(_remoteIpTextbox);
@@ -198,7 +198,7 @@ namespace Connect4
             remotConnectionGroupbox.Controls.Add(_remoteMessageLabel);
         }
 
-        private void RemoteResetButton_Click(object? sender, EventArgs e)
+        private async void RemoteResetButton_Click(object? sender, EventArgs e)
         {
             string[]? ipInfo = _remoteIpTextbox?.Text.Split(':');
             if (ipInfo is null || !IPAddress.TryParse(ipInfo[0], out _) || !int.TryParse(ipInfo[1], out var port))
@@ -209,9 +209,7 @@ namespace Connect4
 
             Invoke(() => _remoteMessageLabel!.Text = $"Connecting to {ipInfo[0]}:{port}");
 
-            var communicator = new Communicator(5001, ipInfo[0], port);
-            DoRemotePlay(communicator)
-                .GetAwaiter().GetResult();
+            await DoRemotePlay(new Communicator(101, ipInfo[0], port));
         }
 
         private async Task DoRemotePlay(Communicator communicator)
