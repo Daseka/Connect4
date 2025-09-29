@@ -70,7 +70,7 @@ public class Mcts(
 
     private static void Backpropagate(Node node, double result)
     {
-        // If the result is 0, we set it to a small value to enable switching between players
+        // If the result is 0, set it to a small value to enable switching between players
         result = result == 0 ? 1e-9 : result;
 
         Node? currentNode = node;
@@ -214,6 +214,7 @@ public class Mcts(
         if (node.IsLeaf())
         {
             return Expand(node, random);
+            //Expand(node, random);
         }
 
         Node? bestChild = node.GetBestChild(policyNetwork, explorationFactor, random, isDeterministic);

@@ -16,10 +16,10 @@ public partial class Form1 : Form
     private const double ErrorConfidence = 1.96;
     private const double ExplorationConstant = 1.40;
     private const int McstIterations = 800;
-    private const int MovingAverageSize = 20;
+    private const int MovingAverageSize = 50;
     private const int SelfPlayGames = 300;
     private const string Unknown = "Random";
-    private const int VsGames = 300;
+    private const int VsGames = 100;
     private const int ConsecutiveIncreaseLimit = 2;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
@@ -68,7 +68,7 @@ public partial class Form1 : Form
                 {
                     _ = BeginInvoke(() =>
                     {
-                        listBox1.Items.Add("Battle Arena cancelled.");
+                        _ = listBox1.Items.Add("Battle Arena cancelled.");
                         listBox1.TopIndex = listBox1.Items.Count - 1;
                     });
 
@@ -83,7 +83,7 @@ public partial class Form1 : Form
 
                 _ = BeginInvoke(() =>
                 {
-                    listBox1.Items.Add($"Training completed in {stopwatch.ElapsedMilliseconds} ms");
+                    _ = listBox1.Items.Add($"Training completed in {stopwatch.ElapsedMilliseconds} ms");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
@@ -97,7 +97,7 @@ public partial class Form1 : Form
 
             _ = BeginInvoke(() =>
             {
-                listBox1.Items.Add($"Evaluation completed in {stopwatch2.ElapsedMilliseconds} ms");
+                _ = listBox1.Items.Add($"Evaluation completed in {stopwatch2.ElapsedMilliseconds} ms");
                 listBox1.TopIndex = listBox1.Items.Count - 1;
             });
 
@@ -187,11 +187,11 @@ public partial class Form1 : Form
             listBox1.TopIndex = listBox1.Items.Count - 1;
         });
 
-        var (red, yellow, draw, total) = await VsPlayParallel(trainedRedMcts!, _yellowMcts, McstIterations, ExplorationConstant);
-        var agent1Game1 = _redWithDrawPercent;
-        var agent2Game1 = _yellowWithDrawPercent;
-        var draws = draw;
-        var totalGames = total;
+        (int red, int yellow, int draw, int total) = await VsPlayParallel(trainedRedMcts!, _yellowMcts, McstIterations, ExplorationConstant);
+        double agent1Game1 = _redWithDrawPercent;
+        double agent2Game1 = _yellowWithDrawPercent;
+        int draws = draw;
+        int totalGames = total;
 
         _ = BeginInvoke(() =>
         {
@@ -207,8 +207,8 @@ public partial class Form1 : Form
         });
 
         (red, yellow, draw, total) = await VsPlayParallel(_yellowMcts, trainedRedMcts!, McstIterations, ExplorationConstant);
-        var agent1Game2 = _yellowWithDrawPercent;
-        var agent2Game2 = _redWithDrawPercent;
+        double agent1Game2 = _yellowWithDrawPercent;
+        double agent2Game2 = _redWithDrawPercent;
         draws += draw;
         totalGames += total;
 
@@ -219,8 +219,8 @@ public partial class Form1 : Form
         });
 
         //Draw the chart
-        var redPercentAfterTraining = Math.Min(agent1Game2, agent1Game1);
-        var yellowPercentAfterTraining = Math.Min(agent2Game2, agent2Game1);
+        double redPercentAfterTraining = Math.Min(agent1Game2, agent1Game1);
+        double yellowPercentAfterTraining = Math.Min(agent2Game2, agent2Game1);
         _redPercentHistory.Add(redPercentAfterTraining);
         _yellowPercentHistory.Add(yellowPercentAfterTraining);
         _drawPercentHistory.Add(Math.Round(draws / (double)totalGames * 100, 2));
@@ -232,11 +232,11 @@ public partial class Form1 : Form
         });
 
         // Check if the new agent wins more than threshold of the games on one side and is better than the current agent on the other side
-        var agent1Max = Math.Max(agent1Game1, agent1Game2) / 100;
-        var agent1Min = Math.Min(agent1Game1, agent1Game2) / 100;
-        var agent2Min = Math.Min(agent2Game1, agent2Game2) / 100;
+        double agent1Max = Math.Max(agent1Game1, agent1Game2) / 100;
+        double agent1Min = Math.Min(agent1Game1, agent1Game2) / 100;
+        double agent2Min = Math.Min(agent2Game1, agent2Game2) / 100;
 
-        var marginOfError = ErrorConfidence * Math.Sqrt((agent1Min) * (1 - agent1Min) / VsGames);
+        double marginOfError = ErrorConfidence * Math.Sqrt(agent1Min * (1 - agent1Min) / VsGames);
         bool isBetter = (agent1Max * 100) > DeepLearningThreshold && agent2Min + marginOfError < agent1Min;
 
         UpdatePercentChart(DeepLearningThreshold, isBetter);
@@ -354,8 +354,8 @@ public partial class Form1 : Form
 
                             if (winner != 0)
                             {
-                                redMcts.SetWinnerTelemetryHistory(game.Winner);
-                                yellowMcts.SetWinnerTelemetryHistory(game.Winner);
+                                redMcts.SetWinnerTelemetryHistory((Winner)winner);
+                                yellowMcts.SetWinnerTelemetryHistory((Winner)winner);
 
                                 gameEnded = true;
                                 if (winner == 1)
@@ -390,7 +390,7 @@ public partial class Form1 : Form
 
                     lock (sharedTelemetryHistory)
                     {
-                        BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
+                        _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
 
                         _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
                         _telemetryHistory.MergeFrom(yellowMcts.GetTelemetryHistory());
@@ -439,14 +439,16 @@ public partial class Form1 : Form
         bool valueStopEarly = false;
         bool policyStopEarly = false;
         IStandardNetwork? tempValueNetwork = mcts.ValueNetwork!.Clone();
+        tempValueNetwork.Trained = true;
         IStandardNetwork? tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
+        tempPolicyNetwork.Trained = true;
 
-        int movingAveragePolicy= _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2
-            ? MovingAverageSize * 4
+        int movingAveragePolicy = _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2
+            ? MovingAverageSize
             : MovingAverageSize;
 
         // moving average for value is larger because it fluctuates more
-        int movingAverageValue = movingAveragePolicy * 2;
+        int movingAverageValue = movingAveragePolicy;
 
         int i = -1;
         string vStop = string.Empty;
@@ -462,7 +464,7 @@ public partial class Form1 : Form
 
             // Get all new entries plus a little bit of the old entries or a random sample of the entire history
             (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
-                .GetTrainingDataNewFirst((int)(_telemetryHistory.NewEntries * 2));
+                .GetTrainingDataNewFirst((int)(_telemetryHistory.NewEntries * 1.3));
 
             if (!valueStopEarly)
             {
@@ -486,14 +488,16 @@ public partial class Form1 : Form
             //multiply by 2 because value fluctuates more
             if (valueErrorHistory.Count == movingAverageValue)
             {
-                valueErrorHistory.Dequeue();
+                _ = valueErrorHistory.Dequeue();
             }
+
             valueErrorHistory.Enqueue(valueError);
 
             if (policyErrorHistory.Count == movingAveragePolicy)
             {
-                policyErrorHistory.Dequeue();
+                _ = policyErrorHistory.Dequeue();
             }
+
             policyErrorHistory.Enqueue(policyError);
 
             // only start checking for early stoping after a few steps to allow some initial training
@@ -754,7 +758,7 @@ public partial class Form1 : Form
 
                             _ = BeginInvoke(() =>
                             {
-                                Winner result = game.Winner;
+                                var result = (Winner)winner;
                                 panel.RecordResult(result);
                             });
                             globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
@@ -788,7 +792,7 @@ public partial class Form1 : Form
 
         // aggragate global stats to 1 final result
         int red = 0, yellow = 0, draw = 0, total = 0;
-        foreach (var (redWins, yellowWins, drawWins, totalWins) in globalStats.Values)
+        foreach ((int redWins, int yellowWins, int drawWins, int totalWins) in globalStats.Values)
         {
             red += redWins;
             yellow += yellowWins;

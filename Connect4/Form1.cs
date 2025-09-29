@@ -33,6 +33,8 @@ public partial class Form1 : Form
     {
         InitializeComponent();
 
+        //Test();
+
         pictureBox1.Size = new Size(650, 320);
         pictureBox1.Paint += PictureBox1_Paint;
         pictureBox1.Click += PictureBox1_Click;
@@ -103,6 +105,60 @@ public partial class Form1 : Form
         tabPage3.Controls.Clear();
         tabPage3.Controls.Add(singleTabControl);
     }
+
+    private void Test()
+    {
+        _telemetryHistory.LoadFromFile();
+
+        _oldValueNetwork = new MiniBatchMatrixNetwork(valueArray, isSoftmax: false);
+        _oldPolicyNetwork = new MiniBatchMatrixNetwork(policyArray, isSoftmax: true);
+
+        INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldValueNetwork);
+        INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldPolicyNetwork);
+
+        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _telemetryHistory.GetTrainingDataRandom(1000);
+
+        double[][] inputTrain = [.. trainingData.input.Skip(100)];
+        double[][] inputTest = [..trainingData.input.Take(100)];
+        double[][] policyTrain = [..trainingData.policyOutput.Skip(100)];
+        double[][] policyTest = [.. trainingData.policyOutput.Take(100)];
+        double[][] valueTrain = [.. trainingData.valueOutput.Skip(100)];
+        double[][] valueTest = [.. trainingData.valueOutput.Take(100)];
+
+        var results = new List<string>();
+        for (int i = 0; i < inputTest.Length; i++)
+        {
+            double[] valueResult = _oldValueNetwork.Calculate(inputTest[i]);
+            double[] policyResult = _oldPolicyNetwork.Calculate(inputTest[i]);
+
+            results.Add($"Value out: {string.Join(", ", valueResult.Select(x => x.ToString("F3")))}");
+            results.Add($"Value org: {string.Join(", ", valueTest[i].Select(x => x.ToString("F3")))}");
+            results.Add($"Policy out: {string.Join(", ", policyResult.Select(x => x.ToString("F3")))}");
+            results.Add($"Policy org: {string.Join(", ", policyTest[i].Select(x => x.ToString("F3")))}");
+        }
+
+        results = new List<string>();
+        for (int i = 0; i < 200; i++)
+        {
+            valueTrainer.Train(inputTrain, valueTrain);
+            policyTrainer.Train(inputTrain, policyTrain);
+            //valueTrainer.Train(inputTest, valueTest);
+            //policyTrainer.Train(inputTest, policyTest);
+        }
+
+        
+        for (int i = 0; i < inputTest.Length; i++)
+        {
+            double[] valueResult = _oldValueNetwork.Calculate(inputTest[i]);
+            double[] policyResult = _oldPolicyNetwork.Calculate(inputTest[i]);
+
+            results.Add($"Value out: {string.Join(", ", valueResult.Select(x => x.ToString("F3")))}");
+            results.Add($"Value org: {string.Join(", ", valueTest[i].Select(x => x.ToString("F3")))}");
+            results.Add($"Policy out: {string.Join(", ", policyResult.Select(x => x.ToString("F3")))}");
+            results.Add($"Policy org: {string.Join(", ", policyTest[i].Select(x => x.ToString("F3")))}");
+        }
+    }
+
 
     private static int PlacePiece(
         Connect4Game connect4Game,

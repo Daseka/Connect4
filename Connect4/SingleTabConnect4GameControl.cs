@@ -97,7 +97,7 @@ namespace Connect4
                 Text = "Red Agent",
                 ForeColor = Color.Red,
                 Location = new Point(600, 11),
-                Size = new Size(200, 275),
+                Size = new Size(200, 300),
             };
             LoadAgentsIntoRadioButtons(_redAgentGroupBox, isRed: true);
             Controls.Add(_redAgentGroupBox);
@@ -107,7 +107,7 @@ namespace Connect4
                 Text = "Yellow Agent",
                 ForeColor = Color.Yellow,
                 Location = new Point(600, 290),
-                Size = new Size(200, 275),
+                Size = new Size(200, 300),
             };
             LoadAgentsIntoRadioButtons(_yellowAgentGroupBox, isRed: false);
             Controls.Add(_yellowAgentGroupBox);
@@ -207,6 +207,24 @@ namespace Connect4
                 agentGroupBox.Controls.Add(radioButton);
                 y += 25;
             }
+
+            var randomOption = new RadioButton
+            {
+                Text = "Random",
+                Location = new Point(10, y),
+                AutoSize = true,
+                Tag = new Agent
+                {
+                    Id = "Random",
+                    PolicyNetwork = null,
+                    ValueNetwork = null
+                }
+            };
+            randomOption.CheckedChanged += isRed
+                    ? RedAgentRadioButton_CheckedChanged
+                    : YellowAgentRadioButton_CheckedChanged;
+
+            agentGroupBox.Controls.Add(randomOption);
 
             if (agents.Count != 0)
             {

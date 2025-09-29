@@ -64,7 +64,7 @@ public class Node
     public Node? GetBestChild(IStandardNetwork policyNetwork, double explorationFactor, Random random, bool isDeterministic)
     {
         double currentMaxUcb = double.MinValue;
-        Node? bestChild = null;
+        List<Node> bestChildren = [];
         Node? winningChild = null;
 
         double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard, ref _cachedProbability);
@@ -80,10 +80,15 @@ public class Node
             node.Ucb = node.Wins / (node.Visits == 0 ? 1 : node.Visits)
                 + explorationFactor * policyProbability[node.Move] * Math.Sqrt(parentVisit / (1 + node.Visits));
 
-            if (node.Ucb > currentMaxUcb)
+            double roundedUcb = Math.Round(node.Ucb, 2);
+            if (roundedUcb > currentMaxUcb)
             {
-                currentMaxUcb = node.Ucb;
-                bestChild = node;
+                currentMaxUcb = roundedUcb;
+                bestChildren = [node];
+            }
+            else if (roundedUcb == currentMaxUcb)
+            {
+                bestChildren.Add(node);
             }
 
             if (node.GameBoard.HasWon((int)node.PLayerWhoMadeMove))
@@ -93,7 +98,7 @@ public class Node
         }
 
         //prioratize winning child over best child
-        return winningChild ?? bestChild;
+        return winningChild ?? bestChildren[random.Next(bestChildren.Count)];
     }
 
     public Node? GetMostValuableChild(int movesPlayed, bool isDeterministic)
@@ -180,7 +185,7 @@ public class Node
 
         Wins += result > 0
             ? Math.Round(result, 4)
-            : Math.Round(1 + result, 4);
+            : Math.Round(result, 4);
     }
 
     public double[] GetValueCached(IStandardNetwork valueNetwork)
