@@ -220,18 +220,21 @@ namespace Connect4
                 await Task.Delay(2000);
 
                 i++;
+                string response = string.Empty;
                 if (_selectedRemoteGameModes == "Ai vs Remote")
                 {
                     await communicator.SendAsync($"Ping {i}");
 
-                    string response = await communicator.ListenAsync();
+                    response = await communicator.ListenAsync();
                 } 
                 else
                 {
-                    string response = await communicator.ListenAsync();
+                    response = await communicator.ListenAsync();
                     
                     await communicator.SendAsync($"Pong {i}");
                 }
+
+                Invoke(() => _remoteMessageLabel!.Text = response);
 
                 await Task.Delay(2000);
             } 
