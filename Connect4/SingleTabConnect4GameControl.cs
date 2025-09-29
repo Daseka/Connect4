@@ -221,7 +221,7 @@ namespace Connect4
 
                 i++;
                 string response = string.Empty;
-                if (_selectedRemoteGameModes == "Ai vs Remote")
+                if (_selectedRemoteGameModes == "AI vs Remote")
                 {
                     await communicator.SendAsync($"Ping {i}");
 
