@@ -19,6 +19,12 @@ namespace Connect4
             "AI vs AI"
         ];
 
+        private readonly string[] _remoteGameModes =
+        [
+            "AI vs Remote",
+            "Remote vs AI"
+        ];
+
         private readonly ComboBox _gameModeSelector;
         private readonly Panel _historyPanel;
         private readonly NumericUpDown _maxIterationsSelector;
@@ -29,9 +35,12 @@ namespace Connect4
         private readonly Button _resetButton;
         private readonly Button _undoButton;
         private readonly GroupBox _yellowAgentGroupBox;
+        private TextBox? _remoteIpTextbox;
         private readonly Mcts _yellowMcts;
         private Agent? _selectedAgent;
-        private string _selectedGameMode = "Human vs Human";
+        private Label? _remoteMessageLabel;
+        private string _selectedLocalGameMode = "Human vs Human";
+        private string _selectedRemoteGameModes = "AI vs Remote";
         private GroupBox _remotConnectionGroupbox;
 
         public SingleTabConnect4GameControl(AgentCatalog agentCatalog)
@@ -127,8 +136,8 @@ namespace Connect4
             {
                 Text = "Remote Connection",
                 ForeColor = Color.White,
-                Location = new Point(100, 480),
-                Size = new Size(400, 100),
+                Location = new Point(30, 380),
+                Size = new Size(400, 450),
             };
             LoadRemoteComponents(_remotConnectionGroupbox);
             Controls.Add(_remotConnectionGroupbox);
@@ -140,7 +149,6 @@ namespace Connect4
                 .FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
             string ipAddres = v?.ToString() ?? string.Empty;
 
-
             var ipLabel = new Label
             {
                 Text = $"My IP: {ipAddres}",
@@ -149,6 +157,95 @@ namespace Connect4
                 Font = new Font(FontFamily.GenericMonospace, 15, FontStyle.Bold),
             };
             remotConnectionGroupbox.Controls.Add(ipLabel);
+
+            var remoteSelector = new ComboBox
+            {
+                Location = new Point(10, 50),
+                Size = new Size(160, 23),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+            };
+            remoteSelector.Items.AddRange(_remoteGameModes);
+            remoteSelector.SelectedIndex = 0;
+            remoteSelector.SelectedIndexChanged += RemoteModeSelector_SelectedIndexChanged;
+            remotConnectionGroupbox.Controls.Add(remoteSelector);
+
+            _remoteIpTextbox = new TextBox
+            {
+                Location = new Point(200, 50),
+                Size = new Size(160, 23),
+                Text = "192.168.2.6:5000",
+            };
+
+            remotConnectionGroupbox.Controls.Add(_remoteIpTextbox);
+
+            var remoteResetButton = new Button
+            {
+                Location = new Point(10, 80),
+                ForeColor = Color.Black,
+                AutoSize = true,
+                Text = "Restart remote",
+            };
+            remoteResetButton.Click += RemoteResetButton_Click;
+            remotConnectionGroupbox.Controls.Add(remoteResetButton);
+
+            _remoteMessageLabel = new Label
+            {
+                Text = "Messages will appear here",
+                Location = new Point(10, 120),
+                AutoSize = true,
+                Font = new Font(FontFamily.GenericMonospace, 10, FontStyle.Regular),
+            };
+            remotConnectionGroupbox.Controls.Add(_remoteMessageLabel);
+        }
+
+        private void RemoteResetButton_Click(object? sender, EventArgs e)
+        {
+            string[]? ipInfo = _remoteIpTextbox?.Text.Split(':');
+            if (ipInfo is null || !IPAddress.TryParse(ipInfo[0], out _) || !int.TryParse(ipInfo[1], out var port))
+            {
+                MessageBox.Show("Invalid IP address or port format. Use IP:Port");
+                return;
+            }
+
+            Invoke(() => _remoteMessageLabel!.Text = $"Connecting to {ipInfo[0]}:{port}");
+
+            var communicator = new Communicator(5001, ipInfo[0], port);
+            DoRemotePlay(communicator)
+                .GetAwaiter().GetResult();
+        }
+
+        private async Task DoRemotePlay(Communicator communicator)
+        {
+            int i = 0;
+            do
+            {
+                await Task.Delay(2000);
+
+                i++;
+                if (_selectedRemoteGameModes == "Ai vs Remote")
+                {
+                    await communicator.SendAsync($"Ping {i}");
+
+                    string response = await communicator.ListenAsync();
+                } 
+                else
+                {
+                    string response = await communicator.ListenAsync();
+                    
+                    await communicator.SendAsync($"Pong {i}");
+                }
+
+                await Task.Delay(2000);
+            } 
+            while (i < 10);
+        }
+
+        private void RemoteModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            var remoteComboBox = sender as ComboBox;
+            _ = remoteComboBox ?? throw new NullReferenceException(nameof(remoteComboBox));
+
+            _selectedRemoteGameModes = remoteComboBox.SelectedItem?.ToString() ?? "Human vs Human";
         }
 
         private static int PlacePieceClick(
@@ -203,13 +300,13 @@ namespace Connect4
 
         private void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            _selectedGameMode = _gameModeSelector.SelectedItem?.ToString() ?? "Human vs Human";
-            // If AI vs Human is selected and game is fresh, let AI start
-            if (_selectedGameMode == "AI vs Human")
+            _selectedLocalGameMode = _gameModeSelector.SelectedItem?.ToString() ?? "Human vs Human";
+
+            if (_selectedLocalGameMode == "AI vs Human")
             {
                 if (_moveHistory.Count == 0 && _game.CurrentPlayer == 1)
                 {
-                    PerformAiMove(_redMcts); // AI (Red) starts
+                    PerformAiMove(_redMcts); 
                 }
             }
         }
@@ -295,7 +392,7 @@ namespace Connect4
 
         private void PictureBox_Click(object? sender, EventArgs e)
         {
-            if (_selectedGameMode == "AI vs AI" || (_selectedGameMode == "AI vs Human" && _game.CurrentPlayer == 1))
+            if (_selectedLocalGameMode == "AI vs AI" || (_selectedLocalGameMode == "AI vs Human" && _game.CurrentPlayer == 1))
             {
                 // Ignore clicks when it's AI's turn in AI vs Human mode
                 return;
@@ -320,11 +417,11 @@ namespace Connect4
                 _ = MessageBox.Show("It's a draw!");
                 EndGame(_game, mcts, _pictureBox, _moveHistory);
             }
-            else if (_selectedGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
+            else if (_selectedLocalGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
             {
                 PerformAiMove(mcts);
             }
-            else if (_selectedGameMode == "AI vs Human")
+            else if (_selectedLocalGameMode == "AI vs Human")
             {
                 // Let AI keep playing until it's the human's turn or the game ends
                 while (_game.CurrentPlayer == 1 && _game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
@@ -356,11 +453,11 @@ namespace Connect4
         {
             ResetGameState(_game, _moveHistory, _pictureBox);
 
-            if (_selectedGameMode == "AI vs AI")
+            if (_selectedLocalGameMode == "AI vs AI")
             {
                 StartAiVsAiGame();
             }
-            else if (_selectedGameMode == "AI vs Human")
+            else if (_selectedLocalGameMode == "AI vs Human")
             {
                 // AI (Red) starts
                 PerformAiMove(_redMcts);
