@@ -8,6 +8,9 @@ public class GameBoard
     public const int Rows = 6;
     private const int CellStates = 3;
     private const int LastToPlay = 1;
+    const int LeftPadding = 50;
+    private const int CellHeight = 50;
+    private const int CellWidth = 50;
 
     public int[,] Board { get; private set; }
     public Player LastPlayed { get; private set; } = Player.None;
@@ -37,10 +40,7 @@ public class GameBoard
 
     public void DrawBoard(Graphics g)
     {
-        int cellWidth = 50;
-        int cellHeight = 50;
-
-        int paddingLeft = 150;
+        int paddingLeft = LeftPadding;
         int paddingTop = 10;
 
         for (int i = 0; i < Rows; i++)
@@ -51,15 +51,15 @@ public class GameBoard
                 {
                     1 => Brushes.Red,
                     2 => Brushes.Yellow,
-                    _ => Brushes.LightGray
+                    _ => new SolidBrush(Color.FromArgb(30, 30, 30))
                 };
 
                 if (_playedLocation[0] == i && _playedLocation[1] == j)
                 {
-                    g.FillEllipse(Brushes.Blue, paddingLeft - 4 + j * (cellWidth ), paddingTop - 4 + i * (cellHeight), cellWidth + 8, cellHeight + 8);
+                    g.FillEllipse(Brushes.Blue, paddingLeft - 4 + j * (CellWidth), paddingTop - 4 + i * (CellHeight), CellWidth + 10, CellHeight + 10);
                 }
 
-                g.FillEllipse(brush, paddingLeft + j * cellWidth, paddingTop + i * cellHeight, cellWidth, cellHeight);
+                g.FillEllipse(brush, paddingLeft + j * CellWidth, paddingTop + i * CellHeight, CellWidth, CellHeight);
             }
         }
     }
@@ -171,7 +171,6 @@ public class GameBoard
 
     public bool HasWon(int player)
     {
-        // Check horizontal, vertical, and diagonal connections
         return CheckHorizontal(player) || CheckVertical(player) || CheckDiagonal(player);
     }
 
@@ -235,27 +234,21 @@ public class GameBoard
     {
         if (clickEvent == null)
         {
-            return -1; // Return an invalid index if the event is null
+            return -1; 
         }
 
-        // Adjust the click position to account for padding and calculate the column index
-        const int emptySpace = 300;
-        const int leftPadding = 150;
-        int columnWidth = (pictureBox1.Width - emptySpace) / Columns;
-        int columnIndex = (clickEvent.X - leftPadding) / columnWidth;
+        int columnIndex = Math.Min((clickEvent.X - LeftPadding) / CellWidth, (CellWidth * Columns) / CellWidth);
 
-        // Ensure the column index is within valid range
         return Math.Max(0, Math.Min(columnIndex, Columns - 1));
     }
 
     private bool CheckDiagonal(int player)
     {
-        // Check for diagonal win from bottom-left to top-right
-        for (int row = 0; row < Rows; row++)
+        for (int i = 0; i < Rows; i++)
         {
-            for (int col = 0; col < Columns; col++)
+            for (int j = 0; j < Columns; j++)
             {
-                if (CheckDiagonalWin(row, col, player))
+                if (CheckDiagonalWin(i, j, player))
                 {
                     return true;
                 }
@@ -265,15 +258,18 @@ public class GameBoard
         return false;
     }
 
-    private bool CheckDiagonalWin(int row, int col, int player)
+    private bool CheckDiagonalWin(int row, int column, int player)
     {
-        // Check for diagonal win from bottom-left to top-right
         int count = 0;
         for (int i = -3; i <= 3; i++)
         {
-            int r = row + i;
-            int c = col + i;
-            if (r >= 0 && r < Rows && c >= 0 && c < Columns && Board[r, c] == player)
+            int rowIndex = row + i;
+            int columnIndex = column + i;
+            if (rowIndex >= 0 
+                && rowIndex < Rows 
+                && columnIndex >= 0 
+                && columnIndex < Columns 
+                && Board[rowIndex, columnIndex] == player)
             {
                 count++;
                 if (count == 4)
@@ -287,13 +283,16 @@ public class GameBoard
             }
         }
 
-        // Check for diagonal win from top-left to bottom-right
         count = 0;
         for (int i = -3; i <= 3; i++)
         {
-            int r = row - i;
-            int c = col + i;
-            if (r >= 0 && r < Rows && c >= 0 && c < Columns && Board[r, c] == player)
+            int rowIndex = row - i;
+            int columnIndex = column + i;
+            if (rowIndex >= 0 
+                && rowIndex < Rows 
+                && columnIndex >= 0 
+                && columnIndex < Columns 
+                && Board[rowIndex, columnIndex] == player)
             {
                 count++;
                 if (count == 4)
@@ -312,18 +311,14 @@ public class GameBoard
 
     private bool CheckHorizontal(int player)
     {
-        // Iterate through each row of the board
         for (int row = 0; row < Rows; row++)
         {
             int count = 0;
-            // Check each column in the current row
-            for (int col = 0; col < Columns; col++)
+            for (int column = 0; column < Columns; column++)
             {
-                // If the current cell matches the player's number, increment the count
-                if (Board[row, col] == player)
+                if (Board[row, column] == player)
                 {
                     count++;
-                    // If we have 4 in a row, return true
                     if (count == 4)
                     {
                         return true;
@@ -331,27 +326,24 @@ public class GameBoard
                 }
                 else
                 {
-                    // Reset count if the sequence is broken
                     count = 0;
                 }
             }
         }
-        // No horizontal win found
+
         return false;
     }
 
     private bool CheckVertical(int player)
     {
-        // Check each column for a vertical win
-        for (int col = 0; col < Columns; col++)
+        for (int column = 0; column < Columns; column++)
         {
             int count = 0;
             for (int row = 0; row < Rows; row++)
             {
-                if (Board[row, col] == player)
+                if (Board[row, column] == player)
                 {
                     count++;
-                    // If we have 4 in a row, return true
                     if (count == 4)
                     {
                         return true;
@@ -359,11 +351,11 @@ public class GameBoard
                 }
                 else
                 {
-                    count = 0; // Reset count if the sequence is broken
+                    count = 0; 
                 }
             }
         }
 
-        return false; // No vertical win found
+        return false;
     }
 }

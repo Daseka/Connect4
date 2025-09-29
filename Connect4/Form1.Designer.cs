@@ -36,15 +36,17 @@
             button4 = new Button();
             button5 = new Button();
             button6 = new Button();
+            winPercentChart = new Connect4.GameParts.SimpleChart();
+            flowLayoutPanel1 = new FlowLayoutPanel();
             tabPage2 = new TabPage();
             textBox1 = new TextBox();
             pictureBox2 = new PictureBox();
             button7 = new Button();
             label1 = new Label();
-            flowLayoutPanel1 = new FlowLayoutPanel();
+            tabPage3 = new TabPage();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            winPercentChart = new Connect4.GameParts.SimpleChart();
+            button2 = new Button();
             tabControl1.SuspendLayout();
             tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
@@ -57,25 +59,30 @@
             // 
             tabControl1.Controls.Add(tabPage1);
             tabControl1.Controls.Add(tabPage2);
+            tabControl1.Controls.Add(tabPage3);
+            tabControl1.Dock = DockStyle.Fill;
             tabControl1.DrawMode = TabDrawMode.OwnerDrawFixed;
-            tabControl1.Location = new Point(12, 12);
+            tabControl1.Location = new Point(0, 0);
             tabControl1.Name = "tabControl1";
             tabControl1.SelectedIndex = 0;
-            tabControl1.Size = new Size(1340, 398);
+            tabControl1.Size = new Size(1364, 859);
             tabControl1.TabIndex = 12;
             // 
             // tabPage1
             // 
+            tabPage1.Controls.Add(button2);
             tabPage1.Controls.Add(pictureBox1);
             tabPage1.Controls.Add(listBox1);
             tabPage1.Controls.Add(button1);
             tabPage1.Controls.Add(button4);
             tabPage1.Controls.Add(button5);
             tabPage1.Controls.Add(button6);
+            tabPage1.Controls.Add(winPercentChart);
+            tabPage1.Controls.Add(flowLayoutPanel1);
             tabPage1.Location = new Point(4, 25);
             tabPage1.Name = "tabPage1";
             tabPage1.Padding = new Padding(3);
-            tabPage1.Size = new Size(1332, 369);
+            tabPage1.Size = new Size(1356, 830);
             tabPage1.TabIndex = 0;
             tabPage1.Text = "Game";
             tabPage1.UseVisualStyleBackColor = true;
@@ -96,7 +103,7 @@
             listBox1.Location = new Point(700, 36);
             listBox1.Name = "listBox1";
             listBox1.ScrollAlwaysVisible = true;
-            listBox1.Size = new Size(626, 319);
+            listBox1.Size = new Size(624, 319);
             listBox1.TabIndex = 2;
             // 
             // button1
@@ -107,11 +114,11 @@
             button1.TabIndex = 3;
             button1.Text = "Reset game";
             button1.UseVisualStyleBackColor = true;
-            button1.Click += SaveButton_Click;
+            button1.Click += ResetButton_Click;
             // 
             // button4
             // 
-            button4.Location = new Point(1020, 11);
+            button4.Location = new Point(922, 11);
             button4.Name = "button4";
             button4.Size = new Size(100, 23);
             button4.TabIndex = 6;
@@ -121,7 +128,7 @@
             // 
             // button5
             // 
-            button5.Location = new Point(1138, 11);
+            button5.Location = new Point(1028, 11);
             button5.Name = "button5";
             button5.Size = new Size(75, 23);
             button5.TabIndex = 7;
@@ -139,6 +146,34 @@
             button6.UseVisualStyleBackColor = true;
             button6.Click += ClearChart_Click;
             // 
+            // winPercentChart
+            // 
+            winPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            winPercentChart.BackColor = Color.Black;
+            winPercentChart.DeepLearnThreshold = 55D;
+            winPercentChart.Location = new Point(6, 370);
+            winPercentChart.Name = "winPercentChart";
+            winPercentChart.Size = new Size(1318, 200);
+            winPercentChart.TabIndex = 10;
+            winPercentChart.Text = "Win Rate History";
+            winPercentChart.Title = "Chart";
+            winPercentChart.XAxisLabel = "X";
+            winPercentChart.YAxisLabel = "Y";
+            winPercentChart.YMax = 100D;
+            winPercentChart.YMin = 0D;
+            // 
+            // flowLayoutPanel1
+            // 
+            flowLayoutPanel1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            flowLayoutPanel1.AutoScroll = true;
+            flowLayoutPanel1.BackColor = SystemColors.Control;
+            flowLayoutPanel1.BorderStyle = BorderStyle.Fixed3D;
+            flowLayoutPanel1.Location = new Point(6, 593);
+            flowLayoutPanel1.Name = "flowLayoutPanel1";
+            flowLayoutPanel1.Padding = new Padding(5);
+            flowLayoutPanel1.Size = new Size(1347, 231);
+            flowLayoutPanel1.TabIndex = 8;
+            // 
             // tabPage2
             // 
             tabPage2.Controls.Add(textBox1);
@@ -148,7 +183,7 @@
             tabPage2.Location = new Point(4, 25);
             tabPage2.Name = "tabPage2";
             tabPage2.Padding = new Padding(3);
-            tabPage2.Size = new Size(1332, 369);
+            tabPage2.Size = new Size(1356, 830);
             tabPage2.TabIndex = 1;
             tabPage2.Text = "State Reader";
             tabPage2.UseVisualStyleBackColor = true;
@@ -189,17 +224,15 @@
             label1.TabIndex = 3;
             label1.Text = "Board State:";
             // 
-            // flowLayoutPanel1
+            // tabPage3
             // 
-            flowLayoutPanel1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            flowLayoutPanel1.AutoScroll = true;
-            flowLayoutPanel1.BackColor = SystemColors.Control;
-            flowLayoutPanel1.BorderStyle = BorderStyle.Fixed3D;
-            flowLayoutPanel1.Location = new Point(12, 616);
-            flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Padding = new Padding(5);
-            flowLayoutPanel1.Size = new Size(1332, 240);
-            flowLayoutPanel1.TabIndex = 8;
+            tabPage3.Location = new Point(4, 25);
+            tabPage3.Name = "tabPage3";
+            tabPage3.Padding = new Padding(3);
+            tabPage3.Size = new Size(1356, 830);
+            tabPage3.TabIndex = 2;
+            tabPage3.Text = "Single Game";
+            tabPage3.UseVisualStyleBackColor = true;
             // 
             // statusStrip1
             // 
@@ -216,21 +249,15 @@
             toolStripStatusLabel1.Size = new Size(39, 17);
             toolStripStatusLabel1.Text = "Ready";
             // 
-            // winPercentChart
+            // button2
             // 
-            winPercentChart.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            winPercentChart.BackColor = Color.Black;
-            winPercentChart.DeepLearnThreshold = 55D;
-            winPercentChart.Location = new Point(12, 410);
-            winPercentChart.Name = "winPercentChart";
-            winPercentChart.Size = new Size(1332, 200);
-            winPercentChart.TabIndex = 10;
-            winPercentChart.Text = "Win Rate History";
-            winPercentChart.Title = "Chart";
-            winPercentChart.XAxisLabel = "X";
-            winPercentChart.YAxisLabel = "Y";
-            winPercentChart.YMax = 100D;
-            winPercentChart.YMin = 0D;
+            button2.Location = new Point(1109, 11);
+            button2.Name = "button2";
+            button2.Size = new Size(75, 23);
+            button2.TabIndex = 12;
+            button2.Text = "Coleseum";
+            button2.UseVisualStyleBackColor = true;
+            button2.Click += Coliseum_Click;
             // 
             // Form1
             // 
@@ -240,8 +267,6 @@
             ClientSize = new Size(1364, 881);
             Controls.Add(tabControl1);
             Controls.Add(statusStrip1);
-            Controls.Add(flowLayoutPanel1);
-            Controls.Add(winPercentChart);
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Connect4";
@@ -263,6 +288,7 @@
         private CustomTabControl tabControl1;
         private TabPage tabPage1;
         private TabPage tabPage2;
+        private TabPage tabPage3;
         private PictureBox pictureBox1;
         private ListBox listBox1;
         private Button button1;
@@ -277,5 +303,6 @@
         private ToolStripStatusLabel toolStripStatusLabel1;
         private Connect4.GameParts.SimpleChart winPercentChart;
         private TextBox textBox1;
+        private Button button2;
     }
 }

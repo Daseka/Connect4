@@ -8,9 +8,9 @@ namespace Connect4.GameParts
 {
     public class SimpleChart : Control
     {
-        private readonly List<double> _redPoints = new();
-        private readonly List<double> _yellowPoints = new();
-        private readonly List<double> _drawPoints = new();
+        private readonly List<double> _redPoints = [];
+        private readonly List<double> _yellowPoints = [];
+        private readonly List<double> _drawPoints = [];
         private readonly Pen _redPen = new(Color.Silver, 2);
         private readonly Pen _yellowPen = new(Color.FromArgb(101, 53, 1), 2);
         private readonly Pen _drawPen = new(Color.FromArgb(23, 82, 85), 2);
@@ -26,6 +26,7 @@ namespace Connect4.GameParts
         public double YMin { get; set; } = 0;
         public double YMax { get; set; } = 100;
         public double DeepLearnThreshold { get; set; } = 55;
+        public List<bool> PositionsRedNetworkBetter { get; set; } = [];
 
         public SimpleChart()
         {
@@ -39,6 +40,12 @@ namespace Connect4.GameParts
             _yellowPoints.Add(yellowValue);
             _drawPoints.Add(drawValue);
             Invalidate();
+        }
+
+        public void Reset()
+        {
+            PositionsRedNetworkBetter.Clear();
+            ClearData();
         }
 
         public void ClearData()
@@ -56,10 +63,8 @@ namespace Connect4.GameParts
             Graphics g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             
-            // Fill background
             g.FillRectangle(_backgroundBrush, ClientRectangle);
             
-            // Calculate margins
             int leftMargin = 60;
             int rightMargin = 40;
             int topMargin = 50;
@@ -72,28 +77,24 @@ namespace Connect4.GameParts
                 Height - topMargin - bottomMargin
             );
             
-            // Draw title
             SizeF titleSize = g.MeasureString(Title, _titleFont);
             g.DrawString(Title, _titleFont, _textBrush, 
                 (Width - titleSize.Width) / 2, 10);
             
-            // Draw Y-axis label (rotated)
             g.TranslateTransform(15, chartArea.Y + chartArea.Height / 2);
             g.RotateTransform(-90);
+
             SizeF yLabelSize = g.MeasureString(YAxisLabel, _axisFont);
             g.DrawString(YAxisLabel, _axisFont, _textBrush, -yLabelSize.Width / 2, 0);
             g.ResetTransform();
             
-            // Draw X-axis label
             SizeF xLabelSize = g.MeasureString(XAxisLabel, _axisFont);
             g.DrawString(XAxisLabel, _axisFont, _textBrush, 
                 chartArea.X + (chartArea.Width - xLabelSize.Width) / 2, 
                 chartArea.Bottom + 30);
             
-            // Draw chart border
             g.DrawRectangle(Pens.LightGray, chartArea);
             
-            // Draw grid lines and Y-axis labels
             int gridLines = 5;
             for (int i = 0; i <= gridLines; i++)
             {
@@ -128,12 +129,10 @@ namespace Connect4.GameParts
                     double x;
                     if (_redPoints.Count == 1)
                     {
-                        // Single data point - center it
                         x = chartArea.Left + chartArea.Width / 2.0;
                     }
                     else
                     {
-                        // Multiple data points - distribute evenly
                         x = chartArea.Left + (double)i / (_redPoints.Count - 1) * chartArea.Width;
                     }
                     
@@ -167,11 +166,9 @@ namespace Connect4.GameParts
                     g.DrawLines(_drawPen, drawPoints);
                 }
                 
-                // Draw data points
                 for (int i = 0; i < redPoints.Length; i++)
                 {
-                    // Choose color based on value - green if > 60, red otherwise
-                    Color pointColor = _redPoints[i] > DeepLearnThreshold
+                    Color pointColor = PositionsRedNetworkBetter[i]
                         ? Color.FromArgb(0, 255, 0) 
                         : Color.FromArgb(255, 0, 0);
                     g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);

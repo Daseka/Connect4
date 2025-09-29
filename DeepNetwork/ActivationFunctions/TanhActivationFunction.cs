@@ -1,4 +1,4 @@
-﻿namespace DeepNetwork;
+﻿namespace DeepNetwork.ActivationFunctions;
 
 
 [Serializable]
