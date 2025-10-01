@@ -4,13 +4,14 @@ using System.Text;
 
 namespace Connect4
 {
-    public class  Communicator
+    public class  Communicator: IDisposable
     {
         private readonly int _incomingPort;
         private readonly string _outgoingIp;
         private readonly int _outgoingPort;
         private readonly UdpClient? _udpClient;
-        private IPEndPoint? _remoteEndPoint;
+        private readonly IPEndPoint? _remoteEndPoint;
+        private CancellationTokenSource _cancellationTokenSource = new();
 
         public Communicator(int incomingPort, string outgoingIp, int outgoingPort)
         {
@@ -22,13 +23,28 @@ namespace Connect4
             _remoteEndPoint = new IPEndPoint(IPAddress.Parse(_outgoingIp), _outgoingPort);
         }
 
+        public void Dispose()
+        {
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Dispose();
+
+            GC.SuppressFinalize(this);
+            _udpClient?.Dispose();
+        }
+
         public async Task<string> ListenAsync()
         {
             _ = _udpClient ?? throw new InvalidOperationException("UDP client is not initialized.");
 
-            var receivedResults = await _udpClient.ReceiveAsync();
-
-            return Encoding.UTF8.GetString(receivedResults.Buffer);
+            try
+            {
+                var receivedResults = await _udpClient.ReceiveAsync(_cancellationTokenSource.Token);
+                return Encoding.UTF8.GetString(receivedResults.Buffer);
+            }
+            catch (OperationCanceledException)
+            {
+                return "-1";
+            }
         }
 
         public async Task SendAsync(string message)
