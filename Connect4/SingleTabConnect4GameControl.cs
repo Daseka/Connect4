@@ -14,7 +14,6 @@ namespace Connect4
         private const string HumanVsHuman = "Human vs Human";
         private const int IncomingPort = 101;
         private const string RemoteVsAi = "Remote vs AI";
-        private const string DefaultRemotIp = "192.168.2.6:101";
         private readonly AgentCatalog _agentCatalog;
         private readonly List<Bitmap> _boardStateHistory = [];
         private readonly Connect4Game _game = new();
@@ -209,14 +208,12 @@ namespace Connect4
 
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
-                await Task.Delay(2000);
-
                 string response = string.Empty;
                 if (_selectedRemoteGameModes == AiVsRemote)
                 {
                     int move = await PerformAiMoveOnly(_redMcts);
                     await communicator.SendAsync($"{move}");
-                    BeginInvoke(() => _messageConsole?.AppendText($"Sening move:\t {move}" + Environment.NewLine));
+                    Invoke(() => _messageConsole?.AppendText($"Sening move:\t {move}" + Environment.NewLine));
 
                     int val = await GetRemoteResponse(communicator);
                     if (val == -1)
@@ -224,7 +221,7 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-                    BeginInvoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
                 }
                 else
                 {
@@ -234,19 +231,27 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-                    BeginInvoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
 
                     int move = await PerformAiMoveOnly(_yellowMcts);
                     await communicator.SendAsync($"{move}");
-                    BeginInvoke(() => _messageConsole?.AppendText($"Sending move:\t {move}" + Environment.NewLine));
+                    Invoke(() => _messageConsole?.AppendText($"Sending move:\t {move}" + Environment.NewLine));
                 }
-
-                await Task.Delay(2000);
             }
 
             if (_game.GameBoard.HasDraw() || _game.Winner != Winner.StillPlaying)
             {
-                BeginInvoke(() => MessageBox.Show($" Game has ended winner = {_game.Winner} !"));
+                string winnerText = (_game.Winner, _selectedRemoteGameModes) switch
+                {
+                    (Winner.Red, AiVsRemote) => "Red (Me)",
+                    (Winner.Yellow, AiVsRemote) => "Yellow (Them)",
+                    (Winner.Red, RemoteVsAi) => "Red (Them)",
+                    (Winner.Yellow, RemoteVsAi) => "Yellow (Me)",
+                    (_, _) => "it's a draw"
+                };
+
+                Invoke(() => MessageBox.Show($" Game has ended winner = {winnerText} !"));
+                EndGame(_game, _yellowMcts, _pictureBox, _moveHistory);
             }
         }
 
@@ -335,7 +340,7 @@ namespace Connect4
 
             var ipLabel = new Label
             {
-                Text = $"My IP= {ipAddres}:{IncomingPort}",
+                Text = $"My IP = {ipAddres}:{IncomingPort}",
                 Location = new Point(10, 20),
                 AutoSize = true,
                 Font = new Font(FontFamily.GenericMonospace, 15, FontStyle.Bold),
@@ -357,7 +362,7 @@ namespace Connect4
             {
                 Location = new Point(200, 50),
                 Size = new Size(160, 23),
-                Text = DefaultRemotIp,
+                Text = $"{ipAddres}:{IncomingPort}",
             };
 
             remotConnectionGroupbox.Controls.Add(_remoteIpTextbox);

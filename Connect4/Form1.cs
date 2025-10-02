@@ -26,8 +26,11 @@ public partial class Form1 : Form
     private Mcts _redMcts;
     private Mcts _yellowMcts;
 
-    private readonly int[] valueArray = [127, 256, 128, 64, 32, 1];
-    private readonly int[] policyArray = [127, 256, 128, 64, 32, 7];
+    //private readonly int[] valueArray = [127, 256, 128, 64, 32, 1];
+    //private readonly int[] policyArray = [127, 256, 128, 64, 32, 7];
+
+    private readonly int[] valueArray = [127, 512, 256, 128, 64, 1];
+    private readonly int[] policyArray = [127, 512, 256, 128, 64, 7];
 
     public Form1()
     {
