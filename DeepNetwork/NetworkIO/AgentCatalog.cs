@@ -26,18 +26,13 @@ public class AgentCatalog(int catalogSize)
         _agentIds.Enqueue(agent.Id);
     }
 
-    public Agent? GetLatestAgent()
+    public List<Agent> GetLatestAgents(int count)
     {
-        Agent? oldestAgent = null;
-        foreach (Agent agent in Entries.Values)
-        {
-            if (agent.Generation > (oldestAgent?.Generation ?? 0))
-            {
-                oldestAgent = agent;
-            }
-        }
+        var lastAgents = Entries.Values
+            .OrderByDescending(agent => agent.Generation)
+            .Take(count);
 
-        return oldestAgent;
+        return [.. lastAgents];
     }
 
     public void LoadCatalog()

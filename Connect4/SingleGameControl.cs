@@ -5,7 +5,7 @@ using System.Net;
 
 namespace Connect4
 {
-    public class SingleTabConnect4GameControl : UserControl
+    public class SingleGameControl : UserControl
     {
         private const string AiVsAi = "AI vs AI";
         private const string AiVsHuman = "AI vs Human";
@@ -52,7 +52,7 @@ namespace Connect4
         private string _selectedLocalGameMode = HumanVsHuman;
         private string _selectedRemoteGameModes = AiVsRemote;
 
-        public SingleTabConnect4GameControl(AgentCatalog agentCatalog)
+        public SingleGameControl(AgentCatalog agentCatalog)
         {
             _yellowMcts = new Mcts(400);
             _redMcts = new Mcts(400);
@@ -162,7 +162,7 @@ namespace Connect4
         }
 
         private static int PlacePieceClick(
-                    Connect4Game connect4Game,
+            Connect4Game connect4Game,
             MouseEventArgs? clickEvent,
             PictureBox pictureBox)
         {
@@ -269,7 +269,7 @@ namespace Connect4
             DisplayBoardStateHistory();
         }
 
-        private void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
+        private async void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
         {
             _selectedLocalGameMode = _gameModeSelector.SelectedItem?.ToString() ?? HumanVsHuman;
 
@@ -277,7 +277,7 @@ namespace Connect4
             {
                 if (_moveHistory.Count == 0 && _game.CurrentPlayer == 1)
                 {
-                    PerformAiMove(_redMcts);
+                    await PerformAiMove(_redMcts);
                 }
             }
         }
@@ -397,11 +397,9 @@ namespace Connect4
             _redMcts.MaxIterations = (int)_maxIterationsSelector.Value;
         }
 
-        private void PerformAiMove(Mcts mcts)
+        private async Task PerformAiMove(Mcts mcts)
         {
-            int aiMove = mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true)
-                .GetAwaiter()
-                .GetResult();
+            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
             _ = _game.PlacePieceColumn(aiMove);
             _pictureBox.Refresh();
 
@@ -432,7 +430,7 @@ namespace Connect4
             return aiMove;
         }
 
-        private void PictureBox_Click(object? sender, EventArgs e)
+        private async void PictureBox_Click(object? sender, EventArgs e)
         {
             if (_selectedLocalGameMode == AiVsAi
                 || _selectedLocalGameMode == RemoteVsAi
@@ -465,13 +463,13 @@ namespace Connect4
             }
             else if (_selectedLocalGameMode == HumanVsAi && _game.CurrentPlayer == 2)
             {
-                PerformAiMove(mcts);
+                await PerformAiMove(mcts);
             }
             else if (_selectedLocalGameMode == AiVsHuman)
             {
                 while (_game.CurrentPlayer == 1 && _game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
                 {
-                    PerformAiMove(_redMcts);
+                    await PerformAiMove(_redMcts);
                 }
             }
         }
@@ -521,7 +519,7 @@ namespace Connect4
             await DoRemotePlay(_communicator);
         }
 
-        private void ResetButton_Click(object? sender, EventArgs e)
+        private async void ResetButton_Click(object? sender, EventArgs e)
         {
             ResetGameState(_game, _moveHistory, _pictureBox);
 
@@ -531,7 +529,7 @@ namespace Connect4
             }
             else if (_selectedLocalGameMode == AiVsHuman)
             {
-                PerformAiMove(_redMcts);
+                await PerformAiMove(_redMcts);
             }
         }
 
