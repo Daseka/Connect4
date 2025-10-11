@@ -12,37 +12,33 @@ namespace DeepNetwork;
 
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
-    private const double LearningRate = 0.01;
+    private const double LearningRate = 0.001;
     private const double NearNullValue = 1e-11d;
 
     private readonly IActivationFunction[] _activations;
 
     // Adam optimizer state
     private readonly Matrix<double>[] _adamM;
-
     private readonly Vector<double>[] _adamMBias;
     private readonly Matrix<double>[] _adamV;
     private readonly Vector<double>[] _adamVBias;
+
     private readonly ConcurrentDictionary<string, double[]> _cachedValues = new();
     private readonly ConcurrentQueue<string> _cacheKeys = new();
-
     private readonly Random _rand = new();
     private readonly int[] _structure;
     private int _adamT;
 
     // Matrix/Vector representations for batch training
-    private Vector<double>[] _biases;
-
-    private int[] _biasOffsets;
-
-    private double[] _flatBiases;
+    private Vector<double>[] _biases = [];
+    private int[] _biasOffsets = [];
+    private double[] _flatBiases = [];
 
     // Flat arrays for ultra-fast foward pass
-    private double[] _flatWeights;
-
-    private int[] _layerOffsets;
-    private double[] _values;
-    private int[] _weightOffsets;
+    private double[] _flatWeights = [];
+    private int[] _layerOffsets = [];
+    private double[] _values = [];
+    private int[] _weightOffsets = [];
 
     private Matrix<double>[] _weights;
     public static string NetworkName { get; } = nameof(MiniBatchMatrixNetwork);
@@ -291,7 +287,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 }
             }
 
-            // Use the snapshot for consistent gradient computation across all threads
             (Matrix<double>[] batchGradients, Vector<double>[] batchBiasGradients, Matrix<double> output) =
                 ComputeBatchGradients(batchInputs, batchTargets, weightsSnapshot, biasesSnapshot, _activations);
 
@@ -315,7 +310,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                     }
                     else
                     {
-                        // Mean Squared Error for others
+                        // Mean Squared Error
                         double diff = outputValue - target;
                         batchErrorSum += 0.5 * diff * diff;
                     }
@@ -325,7 +320,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             batchResults[batchIndex] = (batchGradients, batchBiasGradients, batchErrorSum, actualBatchSize);
         });
 
-        // Merge results from all batches
+        // Merge results from batches
         double errorSum = 0;
         int totalSamplesAccumulated = 0;
 
@@ -333,7 +328,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         {
             var (batchGradients, batchBiasGradients, batchErrorSum, sampleCount) = batchResults[batchIndex];
 
-            // Weight the gradients by batch size 
+            // Weight the gradients by batch size
             for (int l = 0; l < Gradients.Length; l++)
             {
                 Gradients[l] += batchGradients[l] * sampleCount;
@@ -344,7 +339,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             totalSamplesAccumulated += sampleCount;
         }
 
-        // Average gradients across all samples
+        // Average gradients
         for (int l = 0; l < Gradients.Length; l++)
         {
             Gradients[l] /= totalSamplesAccumulated;

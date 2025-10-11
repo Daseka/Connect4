@@ -21,7 +21,6 @@ public class MiniBatchNetworkTrainer : INetworkTrainer
             return 0;     
         }
 
-        // Use the correct parameter order: inputs, targets, batchSize, epochs, learningRate
         double error = _network.TrainMiniBatch(trainingInputs, trainingOutputs, BatchSize);
         _network.Trained = true;
         _network.ClearCache();

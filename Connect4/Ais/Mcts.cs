@@ -20,6 +20,27 @@ public class Mcts(
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
     public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
 
+    public Node CalculateRootNode(GameBoard gameBoard, int previousPlayer, double explorationFactor)
+    {
+        var rootNode = FindRootNode(gameBoard, previousPlayer);
+        bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
+        
+        for (int i = 0; i < MaxIterations; i++)
+        {
+            Node? childNode = useNetworks
+                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, true)
+                : Select(rootNode, _random, explorationFactor);
+            
+            double result = useNetworks
+                ? Simulate(childNode, ValueNetwork!)
+                : Simulate(childNode, _random);
+
+            Backpropagate(childNode, result);
+        }
+
+        return rootNode;
+    }
+
     public Task<int> GetBestMove(
         GameBoard gameBoard,
         int previousPlayer,
@@ -45,9 +66,9 @@ public class Mcts(
             Backpropagate(childNode, result);
         }
         stopwatch.Stop();
-        UpdateTelemetryHistory(rootNode, _telemetryHistory);
+        UpdateTelemetryHistoryVisits(rootNode, _telemetryHistory);
 
-        var bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
+        var bestChild = rootNode.GetMostVisitsChild(movesPlayed, isDeterministic);
         if (bestChild != null)
         {
             bestChild.Parent = null;
@@ -236,12 +257,30 @@ public class Mcts(
         return DeepSimulation(node, valueNetwork);
     }
 
-    private static void UpdateTelemetryHistory(Node root, TelemetryHistory telemetryHistory)
+    private static void UpdateTelemetryHistoryVisits(Node root, TelemetryHistory telemetryHistory)
     {
         double[] policy = new double[MaxColumnCount];
         foreach (Node child in root.Children)
         {
             policy[child.Move] = Math.Max(child.Visits / root.Visits, MinimumPolicyValue);
+        }
+
+        // if the policy is all zero then dont store it because it means no moves are posible from this node
+        if (policy.Sum() == 0)
+        {
+            return;
+        }
+
+        telemetryHistory.StoreTempData(root.GameBoard, policy);
+    }
+
+    private static void UpdateTelemetryHistoryWins(Node root, TelemetryHistory telemetryHistory)
+    {
+        double[] policy = new double[MaxColumnCount];
+        foreach (Node child in root.Children)
+        {
+            double totalWins = root.Wins == 0 ? 1 : root.Wins;
+            policy[child.Move] = Math.Max(child.Wins / totalWins, MinimumPolicyValue);
         }
 
         // if the policy is all zero then dont store it because it means no moves are posible from this node

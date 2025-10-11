@@ -101,53 +101,68 @@ public class Node
         return winningChild ?? bestChildren[random.Next(bestChildren.Count)];
     }
 
-    public Node? GetMostValuableChild(int movesPlayed, bool isDeterministic)
+    public Node? GetMostVisitsChild(int movesPlayed, bool isDeterministic)
     {
-        int index = SelectMoveFromVisits([..Children.Select(c => (int)c.Visits)], movesPlayed, isDeterministic);
+        int index = SelectMoveFromValueCounts([..Children.Select(c => (int)c.Visits)], movesPlayed, isDeterministic);
 
         return index < 0 || index >= Children.Count 
             ? null 
             : Children[index];
     }
 
+    public Node? GetMostWinsChild(int movesPlayed, bool isDeterministic)
+    {
+        int index = SelectMoveFromValueCounts([.. Children.Select(c => (int)c.Wins)], movesPlayed, isDeterministic);
+
+        return index < 0 || index >= Children.Count
+            ? null
+            : Children[index];
+    }
+
     /// <summary>
     /// If moves played higher than threshold or deterministic mode is on, then the most visited move is selected.
     /// </summary>
-    private int SelectMoveFromVisits(int[] visitCounts, int movesPlayed, bool isDeterministic)
+    private int SelectMoveFromValueCounts(int[] value, int movesPlayed, bool isDeterministic)
     {
         double temperature = movesPlayed < MovesThreshold ? 2 : 0;
-        
+
         if (temperature == 0 || isDeterministic)
         {
             int mostVisited = 0;
             int maxVisits= 0;
-            int? winningChild = null;
-            for (int i = 0; i < visitCounts.Length; i++)
+            
+            for (int i = 0; i < value.Length; i++)
             {
-                if (visitCounts[i] > maxVisits)
+                if (value[i] > maxVisits)
                 {
-                    maxVisits = visitCounts[i];
+                    maxVisits = value[i];
                     mostVisited = i;
                 }
 
+                //always prioritize winning move
                 if (Children[i].GameBoard.HasWon((int)Children[i].PLayerWhoMadeMove))
                 {
-                    winningChild = i;
+                    return i;
                 }
             }
 
-            //prioratize winning child over best child
-            return winningChild ?? mostVisited;
+            return mostVisited;
         }
 
-        double[] weights = new double[visitCounts.Length];
+        double[] weights = new double[value.Length];
         double sumWeights = 0;
-        for (int i = 0; i < visitCounts.Length; i++)
+        for (int i = 0; i < value.Length; i++)
         {
-            if (visitCounts[i] > 0)
+            if (value[i] > 0)
             {
-                weights[i] = Math.Pow(visitCounts[i], 1/ temperature);
+                weights[i] = Math.Pow(value[i], 1/ temperature);
                 sumWeights += weights[i];
+            }
+
+            //always prioritize winning move
+            if (Children[i].GameBoard.HasWon((int)Children[i].PLayerWhoMadeMove))
+            {
+                return i;
             }
         }
 
@@ -166,7 +181,7 @@ public class Node
             }
         }
 
-        return Array.IndexOf(visitCounts, visitCounts.Max());
+        return Array.IndexOf(value, value.Max());
     }
 
     public bool IsLeaf()

@@ -1,21 +1,29 @@
 using Connect4.Ais;
 using Connect4.GameParts;
 using DeepNetwork.NetworkIO;
+using System.Net;
 
 namespace Connect4
 {
-    public class SingleTabConnect4GameControl : UserControl
+    public class SingleGameControl : UserControl
     {
+        private const string AiVsAi = "AI vs AI";
+        private const string AiVsHuman = "AI vs Human";
+        private const string AiVsRemote = "AI vs Remote";
+        private const string HumanVsAi = "Human vs AI";
+        private const string HumanVsHuman = "Human vs Human";
+        private const int IncomingPort = 101;
+        private const string RemoteVsAi = "Remote vs AI";
         private readonly AgentCatalog _agentCatalog;
         private readonly List<Bitmap> _boardStateHistory = [];
         private readonly Connect4Game _game = new();
 
         private readonly string[] _gameModes =
         [
-            "Human vs Human",
-            "Human vs AI",
-            "AI vs Human",
-            "AI vs AI"
+            HumanVsHuman,
+            HumanVsAi,
+            AiVsHuman,
+            AiVsAi
         ];
 
         private readonly ComboBox _gameModeSelector;
@@ -25,14 +33,26 @@ namespace Connect4
         private readonly PictureBox _pictureBox;
         private readonly GroupBox _redAgentGroupBox;
         private readonly Mcts _redMcts;
+        private readonly GroupBox _remotConnectionGroupbox;
+
+        private readonly string[] _remoteGameModes =
+        [
+            AiVsRemote,
+            RemoteVsAi
+        ];
+
         private readonly Button _resetButton;
         private readonly Button _undoButton;
         private readonly GroupBox _yellowAgentGroupBox;
         private readonly Mcts _yellowMcts;
+        private Communicator? _communicator;
+        private TextBox? _messageConsole;
+        private TextBox? _remoteIpTextbox;
         private Agent? _selectedAgent;
-        private string _selectedGameMode = "Human vs Human";
+        private string _selectedLocalGameMode = HumanVsHuman;
+        private string _selectedRemoteGameModes = AiVsRemote;
 
-        public SingleTabConnect4GameControl(AgentCatalog agentCatalog)
+        public SingleGameControl(AgentCatalog agentCatalog)
         {
             _yellowMcts = new Mcts(400);
             _redMcts = new Mcts(400);
@@ -106,7 +126,7 @@ namespace Connect4
             {
                 Text = "Yellow Agent",
                 ForeColor = Color.Yellow,
-                Location = new Point(600, 290),
+                Location = new Point(600, 310),
                 Size = new Size(200, 300),
             };
             LoadAgentsIntoRadioButtons(_yellowAgentGroupBox, isRed: false);
@@ -120,6 +140,25 @@ namespace Connect4
                 AutoScroll = true,
             };
             Controls.Add(_historyPanel);
+
+            _remotConnectionGroupbox = new GroupBox
+            {
+                Text = "Remote Connection",
+                ForeColor = Color.White,
+                Location = new Point(30, 380),
+                Size = new Size(500, 400),
+            };
+            LoadRemoteComponents(_remotConnectionGroupbox);
+            Controls.Add(_remotConnectionGroupbox);
+        }
+
+        private static async Task<int> GetRemoteResponse(Communicator communicator)
+        {
+            string response = await communicator.ListenAsync();
+
+            return !int.TryParse(response, out int val)
+                ? throw new InvalidOperationException($"Received invalid value from remote: value was {response}")
+                : val;
         }
 
         private static int PlacePieceClick(
@@ -129,6 +168,7 @@ namespace Connect4
         {
             int winner = connect4Game.PlacePieceClick(clickEvent, pictureBox);
             pictureBox.Invoke(pictureBox.Refresh);
+
             return winner;
         }
 
@@ -144,7 +184,7 @@ namespace Connect4
             _historyPanel.Controls.Clear();
 
             int yOffset = 10;
-            foreach (var boardState in _boardStateHistory)
+            foreach (Bitmap boardState in _boardStateHistory)
             {
                 var pictureBox = new PictureBox
                 {
@@ -155,6 +195,63 @@ namespace Connect4
                 };
                 _historyPanel.Controls.Add(pictureBox);
                 yOffset += 138;
+            }
+        }
+
+        private async Task DoRemotePlay(Communicator communicator)
+        {
+            ResetGameState(_game, _moveHistory, _pictureBox);
+            string startMessage = _selectedRemoteGameModes == AiVsRemote
+                ? "Starting game: AI (Red) vs Remote \n Making first move..."
+                : "Starting game: Remote vs AI (Yellow)\n Listening for move..";
+            BeginInvoke(() => _messageConsole?.AppendText($"{startMessage}" + Environment.NewLine));
+
+            while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
+            {
+                string response = string.Empty;
+                if (_selectedRemoteGameModes == AiVsRemote)
+                {
+                    int move = await PerformAiMoveOnly(_redMcts);
+                    await communicator.SendAsync($"{move}");
+                    Invoke(() => _messageConsole?.AppendText($"Sening move:\t {move}" + Environment.NewLine));
+
+                    int val = await GetRemoteResponse(communicator);
+                    if (val == -1)
+                    {
+                        break;
+                    }
+                    _game.PlacePieceColumn(val);
+                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+                }
+                else
+                {
+                    int val = await GetRemoteResponse(communicator);
+                    if (val == -1)
+                    {
+                        break;
+                    }
+                    _game.PlacePieceColumn(val);
+                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+
+                    int move = await PerformAiMoveOnly(_yellowMcts);
+                    await communicator.SendAsync($"{move}");
+                    Invoke(() => _messageConsole?.AppendText($"Sending move:\t {move}" + Environment.NewLine));
+                }
+            }
+
+            if (_game.GameBoard.HasDraw() || _game.Winner != Winner.StillPlaying)
+            {
+                string winnerText = (_game.Winner, _selectedRemoteGameModes) switch
+                {
+                    (Winner.Red, AiVsRemote) => "Red (Me)",
+                    (Winner.Yellow, AiVsRemote) => "Yellow (Them)",
+                    (Winner.Red, RemoteVsAi) => "Red (Them)",
+                    (Winner.Yellow, RemoteVsAi) => "Yellow (Me)",
+                    (_, _) => "it's a draw"
+                };
+
+                Invoke(() => MessageBox.Show($" Game has ended winner = {winnerText} !"));
+                EndGame(_game, _yellowMcts, _pictureBox, _moveHistory);
             }
         }
 
@@ -169,29 +266,29 @@ namespace Connect4
             pictureBox.Invoke(pictureBox.Refresh);
             moveHistory.Clear();
 
-            this.DisplayBoardStateHistory();
+            DisplayBoardStateHistory();
         }
 
-        private void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
+        private async void GameModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            _selectedGameMode = _gameModeSelector.SelectedItem?.ToString() ?? "Human vs Human";
-            // If AI vs Human is selected and game is fresh, let AI start
-            if (_selectedGameMode == "AI vs Human")
+            _selectedLocalGameMode = _gameModeSelector.SelectedItem?.ToString() ?? HumanVsHuman;
+
+            if (_selectedLocalGameMode == AiVsHuman)
             {
                 if (_moveHistory.Count == 0 && _game.CurrentPlayer == 1)
                 {
-                    PerformAiMove(_redMcts); // AI (Red) starts
+                    await PerformAiMove(_redMcts);
                 }
             }
         }
 
         private void LoadAgentsIntoRadioButtons(GroupBox agentGroupBox, bool isRed)
         {
-            var agents = _agentCatalog.Entries.Values;
+            Dictionary<string, Agent>.ValueCollection agents = _agentCatalog.Entries.Values;
             agentGroupBox.Controls.Clear();
 
             int y = 20;
-            foreach (var agent in agents)
+            foreach (Agent agent in agents)
             {
                 var radioButton = new RadioButton
                 {
@@ -235,18 +332,75 @@ namespace Connect4
             }
         }
 
+        private void LoadRemoteComponents(GroupBox remotConnectionGroupbox)
+        {
+            IPAddress? v = Dns.GetHostAddresses(Dns.GetHostName())
+                .FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            string ipAddres = v?.ToString() ?? string.Empty;
+
+            var ipLabel = new Label
+            {
+                Text = $"My IP = {ipAddres}:{IncomingPort}",
+                Location = new Point(10, 20),
+                AutoSize = true,
+                Font = new Font(FontFamily.GenericMonospace, 15, FontStyle.Bold),
+            };
+            remotConnectionGroupbox.Controls.Add(ipLabel);
+
+            var remoteSelector = new ComboBox
+            {
+                Location = new Point(10, 50),
+                Size = new Size(160, 23),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+            };
+            remoteSelector.Items.AddRange(_remoteGameModes);
+            remoteSelector.SelectedIndex = 0;
+            remoteSelector.SelectedIndexChanged += RemoteModeSelector_SelectedIndexChanged;
+            remotConnectionGroupbox.Controls.Add(remoteSelector);
+
+            _remoteIpTextbox = new TextBox
+            {
+                Location = new Point(200, 50),
+                Size = new Size(160, 23),
+                Text = $"{ipAddres}:{IncomingPort}",
+            };
+
+            remotConnectionGroupbox.Controls.Add(_remoteIpTextbox);
+
+            var remoteResetButton = new Button
+            {
+                Location = new Point(10, 80),
+                ForeColor = Color.Black,
+                AutoSize = true,
+                Text = "Restart remote",
+            };
+            remoteResetButton.Click += RemoteResetButton_Click;
+            remotConnectionGroupbox.Controls.Add(remoteResetButton);
+
+            _messageConsole = new TextBox
+            {
+                Location = new Point(10, 120),
+                Size = new Size(480, 268),
+                Multiline = true,
+                ReadOnly = true,
+                Font = new Font(FontFamily.GenericMonospace, 10, FontStyle.Regular),
+                BackColor = Color.Black,
+                ForeColor = Color.Lime,
+                BorderStyle = BorderStyle.None,
+            };
+            remotConnectionGroupbox.Controls.Add(_messageConsole);
+        }
+
         private void MaxIterationsSelector_ValueChanged(object? sender, EventArgs e)
         {
             _yellowMcts.MaxIterations = (int)_maxIterationsSelector.Value;
             _redMcts.MaxIterations = (int)_maxIterationsSelector.Value;
         }
 
-        private void PerformAiMove(Mcts mcts)
+        private async Task PerformAiMove(Mcts mcts)
         {
-            int aiMove = mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true)
-                .GetAwaiter()
-                .GetResult();
-            _game.PlacePieceColumn(aiMove);
+            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+            _ = _game.PlacePieceColumn(aiMove);
             _pictureBox.Refresh();
 
             UpdateBoardStateHistory();
@@ -264,9 +418,25 @@ namespace Connect4
             }
         }
 
-        private void PictureBox_Click(object? sender, EventArgs e)
+        private async Task<int> PerformAiMoveOnly(Mcts mcts)
         {
-            if (_selectedGameMode == "AI vs AI" || (_selectedGameMode == "AI vs Human" && _game.CurrentPlayer == 1))
+            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+
+            _ = _game.PlacePieceColumn(aiMove);
+            _pictureBox.Refresh();
+
+            UpdateBoardStateHistory();
+
+            return aiMove;
+        }
+
+        private async void PictureBox_Click(object? sender, EventArgs e)
+        {
+            if (_selectedLocalGameMode == AiVsAi
+                || _selectedLocalGameMode == RemoteVsAi
+                || _selectedLocalGameMode == AiVsRemote
+                || _selectedLocalGameMode == AiVsHuman
+                    && _game.CurrentPlayer == 1)
             {
                 // Ignore clicks when it's AI's turn in AI vs Human mode
                 return;
@@ -279,7 +449,7 @@ namespace Connect4
 
             UpdateBoardStateHistory();
 
-            var mcts = _game.CurrentPlayer == 1 ? _redMcts : _yellowMcts;
+            Mcts mcts = _game.CurrentPlayer == 1 ? _redMcts : _yellowMcts;
             if (winner != 0)
             {
                 string color = winner == 1 ? "Red" : "Yellow";
@@ -291,16 +461,15 @@ namespace Connect4
                 _ = MessageBox.Show("It's a draw!");
                 EndGame(_game, mcts, _pictureBox, _moveHistory);
             }
-            else if (_selectedGameMode == "Human vs AI" && _game.CurrentPlayer == 2)
+            else if (_selectedLocalGameMode == HumanVsAi && _game.CurrentPlayer == 2)
             {
-                PerformAiMove(mcts);
+                await PerformAiMove(mcts);
             }
-            else if (_selectedGameMode == "AI vs Human")
+            else if (_selectedLocalGameMode == AiVsHuman)
             {
-                // Let AI keep playing until it's the human's turn or the game ends
                 while (_game.CurrentPlayer == 1 && _game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
                 {
-                    PerformAiMove(_redMcts);
+                    await PerformAiMove(_redMcts);
                 }
             }
         }
@@ -323,18 +492,44 @@ namespace Connect4
             }
         }
 
-        private void ResetButton_Click(object? sender, EventArgs e)
+        private void RemoteModeSelector_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            var remoteComboBox = sender as ComboBox;
+            _ = remoteComboBox ?? throw new NullReferenceException(nameof(remoteComboBox));
+
+            _selectedRemoteGameModes = remoteComboBox.SelectedItem?.ToString() ?? HumanVsHuman;
+        }
+
+        private async void RemoteResetButton_Click(object? sender, EventArgs e)
+        {
+            _messageConsole?.Clear();
+
+            string[]? ipInfo = _remoteIpTextbox?.Text.Split(':');
+            if (ipInfo is null || !IPAddress.TryParse(ipInfo[0], out _) || !int.TryParse(ipInfo[1], out int port))
+            {
+                _ = MessageBox.Show("Invalid IP address or port format. Use IP:Port");
+                return;
+            }
+
+            _ = BeginInvoke(() => _messageConsole?.AppendText($"Connecting to {ipInfo[0]}:{port}" + Environment.NewLine));
+
+            _communicator?.Dispose();
+            _communicator = new Communicator(IncomingPort, ipInfo[0], port);
+
+            await DoRemotePlay(_communicator);
+        }
+
+        private async void ResetButton_Click(object? sender, EventArgs e)
         {
             ResetGameState(_game, _moveHistory, _pictureBox);
 
-            if (_selectedGameMode == "AI vs AI")
+            if (_selectedLocalGameMode == AiVsAi)
             {
                 StartAiVsAiGame();
             }
-            else if (_selectedGameMode == "AI vs Human")
+            else if (_selectedLocalGameMode == AiVsHuman)
             {
-                // AI (Red) starts
-                PerformAiMove(_redMcts);
+                await PerformAiMove(_redMcts);
             }
         }
 
@@ -344,8 +539,10 @@ namespace Connect4
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
                 mcts = _game.CurrentPlayer == 1 ? _redMcts : _yellowMcts;
-                int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
-                _game.PlacePieceColumn(aiMove);
+                int aiMove = await mcts
+                    .GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+
+                _ = _game.PlacePieceColumn(aiMove);
                 _pictureBox.Refresh();
 
                 UpdateBoardStateHistory();

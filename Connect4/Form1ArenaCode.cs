@@ -10,21 +10,22 @@ namespace Connect4;
 public partial class Form1 : Form
 {
     private const int ArenaIterations = 300;
-    private const int BossLifeMaximum = 3;
-    private const int BossWinStreakMaximum = 5;
+    private const int ChampionsToPlay = 3;
+    private const int ConsecutiveIncreaseLimit = 2;
     private const int DeepLearningThreshold = 55;
+    private const int DeepLearningThresholdMin = 35;
     private const double ErrorConfidence = 1.96;
-    private const double ExplorationConstant = 1.40;
+    private const double ExplorationConstant = 2.40;
     private const int McstIterations = 800;
     private const int MovingAverageSize = 50;
     private const int SelfPlayGames = 300;
     private const string Unknown = "Random";
     private const int VsGames = 100;
-    private const int ConsecutiveIncreaseLimit = 2;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
-    private readonly TelemetryHistory _telemetryHistory = new();
+    private readonly TelemetryHistory _trainingSet = new();
+    private readonly TelemetryHistory _replayBuffer = new();
     private readonly List<double> _yellowPercentHistory = [];
     private Agent? _currentAgent;
     private double _drawPercent;
@@ -37,19 +38,26 @@ public partial class Form1 : Form
     {
         ResetChart();
 
-        int bossLives = BossLifeMaximum;
-        int bossWinStreak = 0;
         bool skipTraining = false;
         int i = 0;
-        Mcts? trainedRedMcts = null;
+        Mcts? trainedAgent = null;
+        Mcts? nextAgent = null;
+        Mcts? championMcts = null;
 
         // Get the current best agent from the catalog or create a new one if none exists
-        _currentAgent = _agentCatalog.GetLatestAgent();
-        if (_currentAgent is null)
+        List<Agent> championAgents = _agentCatalog.GetLatestAgents(ChampionsToPlay);
+        if (championAgents.Count == 0)
         {
             _currentAgent = CreateAgent(ExplorationConstant, _yellowMcts, _currentAgent);
             _agentCatalog.Add(_currentAgent);
+            championAgents.Add(_currentAgent);
         }
+        else
+        {
+            _currentAgent = championAgents.First();
+        }
+
+        int ChampionsRemaining = Math.Min(championAgents.Count,ChampionsToPlay);
 
         while (i < ArenaIterations && !_arenaCancelationSource.IsCancellationRequested)
         {
@@ -57,7 +65,7 @@ public partial class Form1 : Form
             if (!skipTraining)
             {
                 // Reset New entry count telemetry history
-                _telemetryHistory.BeginAddingNewEntries();
+                _trainingSet.BeginAddingNewEntries();
 
                 // play a minimum amont of self play games to refresh the telemetry history
                 var stopwatch = Stopwatch.StartNew();
@@ -77,45 +85,46 @@ public partial class Form1 : Form
 
                 // Train a new red network
                 stopwatch = Stopwatch.StartNew();
-                trainedRedMcts = new Mcts(McstIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
-                _ = await TrainAsync(trainedRedMcts);
+                trainedAgent = nextAgent ?? new Mcts(McstIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
+                _ = await TrainAsync(trainedAgent);
                 stopwatch.Stop();
 
                 _ = BeginInvoke(() =>
                 {
-                    _ = listBox1.Items.Add($"Training completed in {stopwatch.ElapsedMilliseconds} ms");
+                    _ = listBox1.Items.Add($"Training on Selfplay done in {stopwatch.ElapsedMilliseconds} ms");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
 
             skipTraining = false;
 
+            // Reset New entry count telemetry history
+            _trainingSet.BeginAddingNewEntries();
+
             // Evaluate the trained network against the current agent
             var stopwatch2 = Stopwatch.StartNew();
-            bool isBetter = await EvaluateAgent(trainedRedMcts);
+            bool isBetter = await EvaluateAgent(trainedAgent);
             stopwatch2.Stop();
 
             _ = BeginInvoke(() =>
             {
-                _ = listBox1.Items.Add($"Evaluation completed in {stopwatch2.ElapsedMilliseconds} ms");
+                _ = listBox1.Items.Add($"Evaluation done in {stopwatch2.ElapsedMilliseconds} ms");
                 listBox1.TopIndex = listBox1.Items.Count - 1;
             });
 
             if (isBetter)
             {
-                // Boss has lost reset win streak and decrease exploration factor
-                bossWinStreak = 0;
-
-                if (bossLives <= 1)
+                if (ChampionsRemaining <= 1)
                 {
-                    _redMcts = trainedRedMcts ?? _redMcts;
-                    _currentAgent = CreateAgent(ExplorationConstant, _redMcts, _currentAgent);
+                    _redMcts = trainedAgent ?? _redMcts;
 
-                    _agentCatalog.Add(_currentAgent);
+                    _agentCatalog.Add(CreateAgent(ExplorationConstant, _redMcts, championAgents.First()));
+                    championAgents = _agentCatalog.GetLatestAgents(ChampionsToPlay);
+                    _currentAgent = championAgents.First();
 
                     _yellowMcts = new Mcts(McstIterations, _currentAgent.ValueNetwork, _currentAgent.PolicyNetwork);
 
-                    bossLives = 3;
+                    ChampionsRemaining = championAgents.Count;
 
                     _ = BeginInvoke(() =>
                     {
@@ -125,27 +134,39 @@ public partial class Form1 : Form
                 }
                 else
                 {
+
                     skipTraining = true;
-                    bossLives--;
+                    ChampionsRemaining--;
+
+                    _currentAgent = championAgents[championAgents.Count - ChampionsRemaining];
+                    
                     _ = BeginInvoke(() =>
                     {
-                        _ = listBox1.Items.Add($"Boss Lives {bossLives}: Reduced boss life skipping training");
+                        _ = listBox1.Items.Add($"Boss Lives {ChampionsRemaining}: Reduced boss life skipping training");
                         listBox1.TopIndex = listBox1.Items.Count - 1;
                     });
                 }
             }
             else
             {
-                bossWinStreak++;
-                if (bossWinStreak >= BossWinStreakMaximum)
-                {
-                    bossWinStreak = 0;
-                }
+                _currentAgent = championAgents.First();
+                ChampionsRemaining += ChampionsRemaining < ChampionsToPlay ? 1 : 0;
 
-                bossLives += bossLives < BossLifeMaximum ? 1 : 0;
                 _ = BeginInvoke(() =>
                 {
-                    _ = listBox1.Items.Add($"Boss Lives {bossLives}: boss unfased need more training");
+                    _ = listBox1.Items.Add($"Boss Lives {ChampionsRemaining}: boss unfased need more training");
+                    listBox1.TopIndex = listBox1.Items.Count - 1;
+                });
+
+                // Train next agent so it learns from evaluation games as well
+                var stopwatch3 = Stopwatch.StartNew();
+                nextAgent = new Mcts(McstIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
+                _ = await TrainAsync(nextAgent);
+                stopwatch3.Stop();
+
+                _ = BeginInvoke(() =>
+                {
+                    _ = listBox1.Items.Add($"Training on Evaluation games done in {stopwatch3.ElapsedMilliseconds} ms");
                     listBox1.TopIndex = listBox1.Items.Count - 1;
                 });
             }
@@ -183,7 +204,7 @@ public partial class Form1 : Form
         _ = BeginInvoke(() =>
         {
             _ = listBox1.Items.Add(string.Empty);
-            _ = listBox1.Items.Add($"Playing Challenger Vs Champ");
+            _ = listBox1.Items.Add($"Playing Challenger Vs Champ {_currentAgent?.Generation}");
             listBox1.TopIndex = listBox1.Items.Count - 1;
         });
 
@@ -202,7 +223,7 @@ public partial class Form1 : Form
         // Now Evaluate the current agent against the trained network
         _ = BeginInvoke(() =>
         {
-            _ = listBox1.Items.Add($"Playing Champ Vs Challenger");
+            _ = listBox1.Items.Add($"Playing Champ {_currentAgent?.Generation} Vs Challenger");
             listBox1.TopIndex = listBox1.Items.Count - 1;
         });
 
@@ -237,7 +258,9 @@ public partial class Form1 : Form
         double agent2Min = Math.Min(agent2Game1, agent2Game2) / 100;
 
         double marginOfError = ErrorConfidence * Math.Sqrt(agent1Min * (1 - agent1Min) / VsGames);
-        bool isBetter = (agent1Max * 100) > DeepLearningThreshold && agent2Min + marginOfError < agent1Min;
+        bool isBetter = (agent1Max * 100) > DeepLearningThreshold 
+            && agent2Min + marginOfError < agent1Min 
+            && (agent1Min * 100)> DeepLearningThresholdMin;
 
         UpdatePercentChart(DeepLearningThreshold, isBetter);
 
@@ -293,115 +316,105 @@ public partial class Form1 : Form
 
             tasks.Add(Task.Run(async () =>
             {
-                try
+                int gamesPlayed = 0;
+                int redWins = 0;
+                int yellowWins = 0;
+                int draws = 0;
+
+                GamePanel panel = _gamePanels[index];
+                CompactConnect4Game game = panel.Game;
+                PictureBox pictureBox = panel.PictureBox;
+
+                var redMcts = new Mcts(McstIterations, agent.ValueNetwork!.Clone(), agent.PolicyNetwork!.Clone());
+                var yellowMcts = new Mcts(McstIterations, agent.ValueNetwork.Clone(), agent.PolicyNetwork.Clone());
+
+                while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
                 {
-                    int gamesPlayed = 0;
-                    int redWins = 0;
-                    int yellowWins = 0;
-                    int draws = 0;
+                    bool gameEnded = false;
+                    int playedMoves = 0;
 
-                    GamePanel panel = _gamePanels[index];
-                    CompactConnect4Game game = panel.Game;
-                    PictureBox pictureBox = panel.PictureBox;
-
-                    var redMcts = new Mcts(McstIterations, agent.ValueNetwork!.Clone(), agent.PolicyNetwork!.Clone());
-                    var yellowMcts = new Mcts(McstIterations, agent.ValueNetwork.Clone(), agent.PolicyNetwork.Clone());
-
-                    while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
+                    while (!gameEnded && !cancellationToken.IsCancellationRequested)
                     {
-                        bool gameEnded = false;
-                        int playedMoves = 0;
+                        Mcts mcts = game.CurrentPlayer == (int)Player.Red
+                            ? redMcts
+                            : yellowMcts;
 
-                        while (!gameEnded && !cancellationToken.IsCancellationRequested)
+                        int move = await mcts.GetBestMove(
+                            game.GameBoard,
+                            (int)game.GameBoard.LastPlayed,
+                            ExplorationConstant,
+                            playedMoves);
+
+                        if (move == -1)
                         {
-                            Mcts mcts = game.CurrentPlayer == (int)Player.Red
-                                ? redMcts
-                                : yellowMcts;
+                            redMcts.SetWinnerTelemetryHistory(Winner.Draw);
+                            yellowMcts.SetWinnerTelemetryHistory(Winner.Draw);
 
-                            int move = await mcts.GetBestMove(
-                                game.GameBoard,
-                                (int)game.GameBoard.LastPlayed,
-                                ExplorationConstant,
-                                playedMoves);
+                            gameEnded = true;
 
-                            if (move == -1)
+                            draws++;
+                            gamesPlayed++;
+
+                            _ = BeginInvoke(() =>
                             {
-                                redMcts.SetWinnerTelemetryHistory(Winner.Draw);
-                                yellowMcts.SetWinnerTelemetryHistory(Winner.Draw);
+                                gameCount++;
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
 
-                                gameEnded = true;
+                                panel.RecordResult(Winner.Draw);
+                                pictureBox.Refresh();
+                            });
 
-                                draws++;
-                                gamesPlayed++;
+                            globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
+                            game.ResetGame();
 
-                                _ = BeginInvoke(() =>
-                                {
-                                    gameCount++;
-                                    Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
-
-                                    panel.RecordResult(Winner.Draw);
-                                    pictureBox.Refresh();
-                                });
-
-                                globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                game.ResetGame();
-
-                                continue;
-                            }
-
-                            int winner = game.PlacePieceColumn(move);
-                            _ = BeginInvoke(() => pictureBox.Refresh());
-
-                            if (winner != 0)
-                            {
-                                redMcts.SetWinnerTelemetryHistory((Winner)winner);
-                                yellowMcts.SetWinnerTelemetryHistory((Winner)winner);
-
-                                gameEnded = true;
-                                if (winner == 1)
-                                {
-                                    redWins++;
-                                }
-                                else
-                                {
-                                    yellowWins++;
-                                }
-
-                                gamesPlayed++;
-
-                                _ = BeginInvoke(() =>
-                                {
-                                    gameCount++;
-                                    Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
-
-                                    panel.RecordResult(game.Winner);
-                                    pictureBox.Refresh();
-                                });
-
-                                globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                                game.ResetGame();
-
-                                continue;
-                            }
-
-                            playedMoves++;
+                            continue;
                         }
-                    }
 
-                    lock (sharedTelemetryHistory)
-                    {
-                        _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
+                        int winner = game.PlacePieceColumn(move);
+                        _ = BeginInvoke(() => pictureBox.Refresh());
 
-                        _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
-                        _telemetryHistory.MergeFrom(yellowMcts.GetTelemetryHistory());
+                        if (winner != 0)
+                        {
+                            redMcts.SetWinnerTelemetryHistory((Winner)winner);
+                            yellowMcts.SetWinnerTelemetryHistory((Winner)winner);
+
+                            gameEnded = true;
+                            if (winner == 1)
+                            {
+                                redWins++;
+                            }
+                            else
+                            {
+                                yellowWins++;
+                            }
+
+                            gamesPlayed++;
+
+                            _ = BeginInvoke(() =>
+                            {
+                                gameCount++;
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
+
+                                panel.RecordResult((Winner)winner);
+                                pictureBox.Refresh();
+                            });
+
+                            globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
+                            game.ResetGame();
+
+                            continue;
+                        }
+
+                        playedMoves++;
                     }
                 }
-                catch (Exception ex)
+
+                lock (sharedTelemetryHistory)
                 {
-                    _ = BeginInvoke(() =>
-                    {
-                        toolStripStatusLabel1.Text = $"Error in game {index}: {ex.Message}";
-                    });
+                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}");
+
+                    _trainingSet.MergeFrom(redMcts.GetTelemetryHistory());
+                    _trainingSet.MergeFrom(yellowMcts.GetTelemetryHistory());
                 }
             }));
         }
@@ -413,7 +426,7 @@ public partial class Form1 : Form
     {
         Invoke(listBox1.Items.Clear);
 
-        TelemetryHistory telemetryHistory = _telemetryHistory;
+        TelemetryHistory telemetryHistory = _trainingSet;
         var random = new Random();
         int minPolicRuns = int.MaxValue;
         double minPolicyError = double.MaxValue;
@@ -421,8 +434,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
 
-        int sampleSize = _telemetryHistory.Count;
-        int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize) * 2;
+        int sampleSize = _trainingSet.Count;
 
         double previousValueError = double.MaxValue;
         double previousPolicyError = double.MaxValue;
@@ -443,7 +455,7 @@ public partial class Form1 : Form
         IStandardNetwork? tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
         tempPolicyNetwork.Trained = true;
 
-        int movingAveragePolicy = _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2
+        int movingAveragePolicy = _trainingSet.Count > TelemetryHistory.MaxBufferSize / 2
             ? MovingAverageSize
             : MovingAverageSize;
 
@@ -453,7 +465,9 @@ public partial class Form1 : Form
         int i = -1;
         string vStop = string.Empty;
         string pStop = string.Empty;
-        while (i < steps || _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2)
+        int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize) * 2;
+       
+        while (i < steps || _trainingSet.Count > TelemetryHistory.MaxBufferSize /2)
         {
             i++;
 
@@ -464,7 +478,7 @@ public partial class Form1 : Form
 
             // Get all new entries plus a little bit of the old entries or a random sample of the entire history
             (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
-                .GetTrainingDataNewFirst((int)(_telemetryHistory.NewEntries * 1.3));
+                .GetTrainingDataNewFirst((int)(_trainingSet.NewEntries * 1.5));
 
             if (!valueStopEarly)
             {
@@ -618,7 +632,7 @@ public partial class Form1 : Form
                     $"R: {_redPercent:F2}% ({_redWithDrawPercent:F2}%)" +
                     $"Y: {_yellowPercent:F2}% ({_yellowWithDrawPercent:F2}%)" +
                     $"D: {_drawPercent:F2}% " +
-                    $"Data: {_telemetryHistory.Count}";
+                    $"Data: {_trainingSet.Count}";
 
                 int progressPercent = (int)(totalGames / (double)totalGamesToPlay * 100);
                 toolStripStatusLabel1.Text = $"Running: {totalGames}/{totalGamesToPlay} games completed ({progressPercent}%)";
@@ -679,6 +693,7 @@ public partial class Form1 : Form
         var sharedTelemetryHistory = new TelemetryHistory();
         var tasks = new List<Task>();
         var globalStats = new ConcurrentDictionary<int, (int redWins, int yellowWins, int drawWins, int totalWins)>();
+        int gameCount = 0;
 
         for (int gameIndex = 0; gameIndex < parallelGames; gameIndex++)
         {
@@ -725,8 +740,14 @@ public partial class Form1 : Form
                             draws++;
                             gamesPlayed++;
 
+                            redMcts.SetWinnerTelemetryHistory(Winner.Draw);
+                            yellowMcts.SetWinnerTelemetryHistory(Winner.Draw);
+
                             _ = BeginInvoke(() =>
                             {
+                                gameCount++;
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
+
                                 panel.RecordResult(Winner.Draw);
                                 pictureBox.Refresh();
                             });
@@ -745,6 +766,9 @@ public partial class Form1 : Form
 
                         if (winner != 0)
                         {
+                            redMcts.SetWinnerTelemetryHistory((Winner)winner);
+                            yellowMcts.SetWinnerTelemetryHistory((Winner)winner);
+
                             if (winner == 1)
                             {
                                 redWins++;
@@ -758,9 +782,12 @@ public partial class Form1 : Form
 
                             _ = BeginInvoke(() =>
                             {
-                                var result = (Winner)winner;
-                                panel.RecordResult(result);
+                                gameCount++;
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
+
+                                panel.RecordResult((Winner)winner);
                             });
+
                             globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
                             _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
@@ -772,6 +799,14 @@ public partial class Form1 : Form
                             continue;
                         }
                     }
+                }
+
+                lock (sharedTelemetryHistory)
+                {
+                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}");
+
+                    _trainingSet.MergeFrom(redMcts.GetTelemetryHistory());
+                    _trainingSet.MergeFrom(yellowMcts.GetTelemetryHistory());
                 }
             }));
         }
