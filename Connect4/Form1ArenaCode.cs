@@ -17,14 +17,15 @@ public partial class Form1 : Form
     private const double ErrorConfidence = 1.96;
     private const double ExplorationConstant = 2.40;
     private const int McstIterations = 800;
-    private const int MovingAverageSize = 10;//30;
-    private const int SelfPlayGames = 100;//300;
+    private const int MovingAverageSize = 50;
+    private const int SelfPlayGames = 300;
     private const string Unknown = "Random";
     private const int VsGames = 100;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
-    private readonly TelemetryHistory _telemetryHistory = new();
+    private readonly TelemetryHistory _trainingSet = new();
+    private readonly TelemetryHistory _replayBuffer = new();
     private readonly List<double> _yellowPercentHistory = [];
     private Agent? _currentAgent;
     private double _drawPercent;
@@ -64,7 +65,7 @@ public partial class Form1 : Form
             if (!skipTraining)
             {
                 // Reset New entry count telemetry history
-                _telemetryHistory.BeginAddingNewEntries();
+                _trainingSet.BeginAddingNewEntries();
 
                 // play a minimum amont of self play games to refresh the telemetry history
                 var stopwatch = Stopwatch.StartNew();
@@ -98,7 +99,7 @@ public partial class Form1 : Form
             skipTraining = false;
 
             // Reset New entry count telemetry history
-            _telemetryHistory.BeginAddingNewEntries();
+            _trainingSet.BeginAddingNewEntries();
 
             // Evaluate the trained network against the current agent
             var stopwatch2 = Stopwatch.StartNew();
@@ -357,7 +358,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
 
                                 panel.RecordResult(Winner.Draw);
                                 pictureBox.Refresh();
@@ -392,7 +393,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
 
                                 panel.RecordResult((Winner)winner);
                                 pictureBox.Refresh();
@@ -410,10 +411,10 @@ public partial class Form1 : Form
 
                 lock (sharedTelemetryHistory)
                 {
-                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
+                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}");
 
-                    _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
-                    _telemetryHistory.MergeFrom(yellowMcts.GetTelemetryHistory());
+                    _trainingSet.MergeFrom(redMcts.GetTelemetryHistory());
+                    _trainingSet.MergeFrom(yellowMcts.GetTelemetryHistory());
                 }
             }));
         }
@@ -425,7 +426,7 @@ public partial class Form1 : Form
     {
         Invoke(listBox1.Items.Clear);
 
-        TelemetryHistory telemetryHistory = _telemetryHistory;
+        TelemetryHistory telemetryHistory = _trainingSet;
         var random = new Random();
         int minPolicRuns = int.MaxValue;
         double minPolicyError = double.MaxValue;
@@ -433,8 +434,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
 
-        int sampleSize = _telemetryHistory.Count;
-        int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize) * 2;
+        int sampleSize = _trainingSet.Count;
 
         double previousValueError = double.MaxValue;
         double previousPolicyError = double.MaxValue;
@@ -455,7 +455,7 @@ public partial class Form1 : Form
         IStandardNetwork? tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
         tempPolicyNetwork.Trained = true;
 
-        int movingAveragePolicy = _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2
+        int movingAveragePolicy = _trainingSet.Count > TelemetryHistory.MaxBufferSize / 2
             ? MovingAverageSize
             : MovingAverageSize;
 
@@ -465,7 +465,9 @@ public partial class Form1 : Form
         int i = -1;
         string vStop = string.Empty;
         string pStop = string.Empty;
-        while (i < steps || _telemetryHistory.Count > TelemetryHistory.MaxBufferSize / 2)
+        int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize) * 2;
+       
+        while (i < steps || _trainingSet.Count > TelemetryHistory.MaxBufferSize /2)
         {
             i++;
 
@@ -476,7 +478,7 @@ public partial class Form1 : Form
 
             // Get all new entries plus a little bit of the old entries or a random sample of the entire history
             (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
-                .GetTrainingDataNewFirst((int)(_telemetryHistory.NewEntries * 1.3));
+                .GetTrainingDataNewFirst((int)(_trainingSet.NewEntries * 1.5));
 
             if (!valueStopEarly)
             {
@@ -630,7 +632,7 @@ public partial class Form1 : Form
                     $"R: {_redPercent:F2}% ({_redWithDrawPercent:F2}%)" +
                     $"Y: {_yellowPercent:F2}% ({_yellowWithDrawPercent:F2}%)" +
                     $"D: {_drawPercent:F2}% " +
-                    $"Data: {_telemetryHistory.Count}";
+                    $"Data: {_trainingSet.Count}";
 
                 int progressPercent = (int)(totalGames / (double)totalGamesToPlay * 100);
                 toolStripStatusLabel1.Text = $"Running: {totalGames}/{totalGamesToPlay} games completed ({progressPercent}%)";
@@ -744,7 +746,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
 
                                 panel.RecordResult(Winner.Draw);
                                 pictureBox.Refresh();
@@ -781,7 +783,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}";
 
                                 panel.RecordResult((Winner)winner);
                             });
@@ -801,10 +803,10 @@ public partial class Form1 : Form
 
                 lock (sharedTelemetryHistory)
                 {
-                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
+                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingSet.Count} New: {_trainingSet.NewEntries}");
 
-                    _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
-                    _telemetryHistory.MergeFrom(yellowMcts.GetTelemetryHistory());
+                    _trainingSet.MergeFrom(redMcts.GetTelemetryHistory());
+                    _trainingSet.MergeFrom(yellowMcts.GetTelemetryHistory());
                 }
             }));
         }

@@ -7,8 +7,11 @@ namespace Connect4
     public class BoardStateReaderControl : UserControl
     {
         private readonly AgentCatalog _agentCatalog;
+        private readonly Button _calculateButton;
         private readonly Connect4Game _game = new();
         private readonly NumericUpDown _maxIterationsSelector;
+        private readonly SimpleChart _mctsValuesChart;
+        private readonly SimpleChart _networkValuesChart;
         private readonly PictureBox _pictureBox;
         private readonly GroupBox _redAgentGroupBox;
         private readonly Mcts _redMcts;
@@ -63,6 +66,29 @@ namespace Connect4
             };
             LoadAgentsIntoRadioButtons(_redAgentGroupBox);
             Controls.Add(_redAgentGroupBox);
+
+            _networkValuesChart = new SimpleChart
+            {
+                Location = new Point(0, 370),
+                Size = new Size(500, 220),
+            };
+            Controls.Add(_networkValuesChart);
+
+            _mctsValuesChart = new SimpleChart
+            {
+                Location = new Point(0, 600),
+                Size = new Size(500, 220),
+            };
+            Controls.Add(_mctsValuesChart);
+
+            _calculateButton = new Button
+            {
+                Location = new Point(900, 45),
+                Size = new Size(75, 23),
+                Text = "Calculate",
+            };
+            _calculateButton.Click += CalculateButton_Click;
+            Controls.Add(_calculateButton);
         }
 
         private static int PlacePieceClick(
@@ -76,23 +102,68 @@ namespace Connect4
             return winner;
         }
 
-        private async void ResetButton_Click(object? sender, EventArgs e)
+        private async void CalculateButton_Click(object? sender, EventArgs e)
         {
-            _game.ResetGame();
-            _pictureBox.Refresh();
-        }
-
-        private void RedAgentRadioButton_CheckedChanged(object? sender, EventArgs e)
-        {
-            if (sender is RadioButton radioButton && radioButton.Checked)
+            if (_selectedAgent == null)
             {
-                _selectedAgent = radioButton.Tag as Agent;
-                if (_selectedAgent != null)
+                return;
+            }
+
+            _networkValuesChart.ClearData();
+
+            var boardArray = _game.GameBoard.StateToArray().Select(x => (double)x).ToArray();
+            double[]? policyOutput = null;
+            double[]? valueOutput = null;
+            if (_selectedAgent.PolicyNetwork != null)
+            {
+                policyOutput = _selectedAgent.PolicyNetwork.Calculate(boardArray);
+            }
+
+            if (_selectedAgent.ValueNetwork != null)
+            {
+                valueOutput = _selectedAgent.ValueNetwork.Calculate(boardArray);
+            }
+
+            // Display both outputs in chart (policy first, then value if present)
+            var chartValues = new List<(string, double)>();
+            if (policyOutput != null)
+            {
+                for (int i = 0; i < policyOutput.Length; i++)
                 {
-                    _redMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
-                    _redMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
+                    chartValues.Add(($"P{i}", policyOutput[i]));
                 }
             }
+            if (valueOutput != null)
+            {
+                for (int i = 0; i < valueOutput.Length; i++)
+                {
+                    chartValues.Add(($"V{i}", valueOutput[i]));
+                }
+            }
+            _networkValuesChart.SetValues(chartValues);
+
+            var mcts = new Mcts(400, _selectedAgent.ValueNetwork, _selectedAgent.PolicyNetwork);
+            int previousPlayer = _game.CurrentPlayer == 1 ? 2 : 1;
+            mcts.MaxIterations = (int)_maxIterationsSelector.Value;
+            Node rootNode = mcts.CalculateRootNode(_game.GameBoard, previousPlayer, 2.4);
+
+            _mctsValuesChart.ClearData();
+
+            var mctsValues = new List<(string, double)>();
+            if (policyOutput != null)
+            {
+                for (int i = 0; i < rootNode.Children.Count; i++)
+                {
+                    var child = rootNode.Children[i];
+                    mctsValues.Add(($"P{child.Move}", child.Visits / rootNode.Visits));
+                }
+            }
+
+            if (valueOutput != null)
+            {
+                mctsValues.Add(($"V", rootNode.Children.OrderByDescending(x => x.Visits/ rootNode.Visits).First().Wins));
+            }
+            _mctsValuesChart.SetValues(mctsValues);
         }
 
         private void LoadAgentsIntoRadioButtons(GroupBox agentGroupBox)
@@ -155,6 +226,25 @@ namespace Connect4
         private void PictureBox_Paint(object? sender, PaintEventArgs e)
         {
             _game.DrawBoard(e.Graphics);
+        }
+
+        private void RedAgentRadioButton_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (sender is RadioButton radioButton && radioButton.Checked)
+            {
+                _selectedAgent = radioButton.Tag as Agent;
+                if (_selectedAgent != null)
+                {
+                    _redMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
+                    _redMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
+                }
+            }
+        }
+
+        private async void ResetButton_Click(object? sender, EventArgs e)
+        {
+            _game.ResetGame();
+            _pictureBox.Refresh();
         }
     }
 }

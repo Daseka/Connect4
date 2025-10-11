@@ -97,7 +97,7 @@ public partial class Form1 : Form
         InitializeRedPercentChart();
         BackColor = Color.Black;
 
-        _telemetryHistory.LoadFromFile();
+        _trainingSet.LoadFromFile();
         winPercentChart.DeepLearnThreshold = DeepLearningThreshold;
 
         Resize += Form1_Resize;
@@ -201,7 +201,7 @@ public partial class Form1 : Form
     {
         mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
         connect4Game.ResetGame();
-        _telemetryHistory.MergeFrom(mcts.GetTelemetryHistory());
+        _trainingSet.MergeFrom(mcts.GetTelemetryHistory());
 
         pictureBox.Invoke(pictureBox.Refresh);
         listBox.Invoke(listBox.Items.Clear);
@@ -217,7 +217,7 @@ public partial class Form1 : Form
 
         if (save)
         {
-            _telemetryHistory.SaveToFile();
+            _trainingSet.SaveToFile();
             _agentCatalog.SaveCatalog();
         }
     }
@@ -326,7 +326,7 @@ public partial class Form1 : Form
 
     private void Test()
     {
-        _telemetryHistory.LoadFromFile();
+        _trainingSet.LoadFromFile();
 
         _oldValueNetwork = new MiniBatchMatrixNetwork(valueArray, isSoftmax: false);
         _oldPolicyNetwork = new MiniBatchMatrixNetwork(policyArray, isSoftmax: true);
@@ -334,7 +334,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldPolicyNetwork);
 
-        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _telemetryHistory.GetTrainingDataRandom(1000);
+        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _trainingSet.GetTrainingDataRandom(1000);
 
         double[][] inputTrain = [.. trainingData.input.Skip(100)];
         double[][] inputTest = [.. trainingData.input.Take(100)];
