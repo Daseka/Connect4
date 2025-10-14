@@ -3,10 +3,11 @@ using Newtonsoft.Json;
 namespace Connect4.GameParts;
 
 [Serializable]
-public class TelemetryHistory
+public class TrainingBuffer
 {
     public const int MaxBufferSize = 300000;
-    private const string TelemetryHistoryFileName = "telemetry\\telemetry_history.json";
+    private const string Folder = "Buffers";
+    private const string FileName = "trainingBuffer.json";
 
     private readonly Dictionary<string, List<double[]>> _policies = [];
     private readonly Random _random = new();
@@ -209,22 +210,22 @@ public class TelemetryHistory
         return (inputs, policies, values);
     }
 
-    public void LoadFromFile()
+    public virtual void LoadFromFile()
     {
         ClearAll();
 
-        if (!File.Exists(TelemetryHistoryFileName))
+        if (!File.Exists(FileName))
         {
             return;
         }
 
-        string json = File.ReadAllText(TelemetryHistoryFileName);
-        TelemetryHistory? loaded = JsonConvert.DeserializeObject<TelemetryHistory>(json);
+        string json = File.ReadAllText(FileName);
+        TrainingBuffer? loaded = JsonConvert.DeserializeObject<TrainingBuffer>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
     }
 
-    public void MergeFrom(TelemetryHistory other)
+    public void MergeFrom(TrainingBuffer other)
     {
         if (other == null)
         {
@@ -239,10 +240,14 @@ public class TelemetryHistory
         EnforceBufferLimit();
     }
 
-    public void SaveToFile()
+    public virtual void SaveToFile()
     {
+        DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
+
+        string filePath = Path.Combine(directoryInfo.FullName, FileName);
         string json = JsonConvert.SerializeObject(this, Formatting.Indented);
-        File.WriteAllText(TelemetryHistoryFileName, json);
+            
+        File.WriteAllText(filePath, json);
     }
 
     public void StoreTempData(GameBoard gameBoard, double[] policy)

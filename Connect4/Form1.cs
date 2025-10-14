@@ -97,7 +97,7 @@ public partial class Form1 : Form
         InitializeRedPercentChart();
         BackColor = Color.Black;
 
-        _trainingSet.LoadFromFile();
+        _trainingBuffer.LoadFromFile();
         winPercentChart.DeepLearnThreshold = DeepLearningThreshold;
 
         Resize += Form1_Resize;
@@ -199,9 +199,9 @@ public partial class Form1 : Form
         ListBox listBox,
         PictureBox pictureBox)
     {
-        mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
+        mcts.SetWinnerTrainingBuffer(connect4Game.Winner);
         connect4Game.ResetGame();
-        _trainingSet.MergeFrom(mcts.GetTelemetryHistory());
+        _trainingBuffer.MergeFrom(mcts.GetTrainingBuffer());
 
         pictureBox.Invoke(pictureBox.Refresh);
         listBox.Invoke(listBox.Items.Clear);
@@ -210,14 +210,15 @@ public partial class Form1 : Form
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
     {
         var save = MessageBox.Show(
-            "Save Telemetry & Arena catalog?",
+            "Save Training buffer & Arena catalog?",
             "Confirm Save",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question) == DialogResult.Yes;
 
         if (save)
         {
-            _trainingSet.SaveToFile();
+            _trainingBuffer.SaveToFile();
+            _replayBuffer.SaveToFile();
             _agentCatalog.SaveCatalog();
         }
     }
@@ -326,7 +327,7 @@ public partial class Form1 : Form
 
     private void Test()
     {
-        _trainingSet.LoadFromFile();
+        _trainingBuffer.LoadFromFile();
 
         _oldValueNetwork = new MiniBatchMatrixNetwork(valueArray, isSoftmax: false);
         _oldPolicyNetwork = new MiniBatchMatrixNetwork(policyArray, isSoftmax: true);
@@ -334,7 +335,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldPolicyNetwork);
 
-        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _trainingSet.GetTrainingDataRandom(1000);
+        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _trainingBuffer.GetTrainingDataRandom(1000);
 
         double[][] inputTrain = [.. trainingData.input.Skip(100)];
         double[][] inputTest = [.. trainingData.input.Take(100)];

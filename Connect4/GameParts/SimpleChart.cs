@@ -14,7 +14,7 @@ namespace Connect4.GameParts
         private readonly Pen _redPen = new(Color.Silver, 2);
         private readonly Pen _yellowPen = new(Color.FromArgb(101, 53, 1), 2);
         private readonly Pen _drawPen = new(Color.FromArgb(23, 82, 85), 2);
-        private readonly Pen _gridPen = new(Color.Black);//FromArgb(30, 30, 30), 1);
+        private readonly Pen _gridPen = new(Color.Black);
         private readonly Brush _backgroundBrush = new SolidBrush(Color.Black);
         private readonly Brush _textBrush = new SolidBrush(Color.White);
         private readonly Font _titleFont = new("Arial", 12, FontStyle.Bold);
@@ -74,6 +74,7 @@ namespace Connect4.GameParts
             int rightMargin = 40;
             int topMargin = 50;
             int bottomMargin = 50;
+
             Rectangle chartArea = new Rectangle(
                 leftMargin,
                 topMargin,
@@ -82,12 +83,14 @@ namespace Connect4.GameParts
             );
             SizeF titleSize = g.MeasureString(Title, _titleFont);
             g.DrawString(Title, _titleFont, _textBrush, (Width - titleSize.Width) / 2, 10);
+
             // Draw Y axis label
             g.TranslateTransform(15, chartArea.Y + chartArea.Height / 2);
             g.RotateTransform(-90);
             SizeF yLabelSize = g.MeasureString(YAxisLabel, _axisFont);
             g.DrawString(YAxisLabel, _axisFont, _textBrush, -yLabelSize.Width / 2, 0);
             g.ResetTransform();
+
             // Draw X axis label
             SizeF xLabelSize = g.MeasureString(XAxisLabel, _axisFont);
             g.DrawString(XAxisLabel, _axisFont, _textBrush, chartArea.X + (chartArea.Width - xLabelSize.Width) / 2, chartArea.Bottom + 30);
@@ -96,6 +99,7 @@ namespace Connect4.GameParts
             double yMin = _barValues.Count > 0 ? Math.Min(0, _barValues.Min(v => v.value)) : YMin;
             double yMax = _barValues.Count > 0 ? Math.Max(1, _barValues.Max(v => v.value)) : YMax;
             bool isLineChart = _redPoints.Count > 0;
+
             for (int i = 0; i <= gridLines; i++)
             {
                 double value = yMin + (yMax - yMin) * i / gridLines;
@@ -103,9 +107,10 @@ namespace Connect4.GameParts
                 g.DrawLine(_gridPen, chartArea.Left, y, chartArea.Right, y);
                 if (isLineChart)
                 {
-                    string label = value.ToString("F2");
+                    string label = value.ToString("F0");
                     SizeF labelSize = g.MeasureString(label, _axisFont);
                     g.DrawString(label, _axisFont, _textBrush, chartArea.Left - labelSize.Width - 5, y - labelSize.Height / 2);
+                    g.DrawString(label, _axisFont, _textBrush, chartArea.Left + chartArea.Width + 30 - labelSize.Width, y - labelSize.Height / 2);
                 }
             }
             // Draw bars if _barValues is set

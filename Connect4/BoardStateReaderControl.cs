@@ -10,8 +10,9 @@ namespace Connect4
         private readonly Button _calculateButton;
         private readonly Connect4Game _game = new();
         private readonly NumericUpDown _maxIterationsSelector;
+        private readonly SimpleChart _mctsPolicyChart;
         private readonly SimpleChart _mctsValuesChart;
-        private readonly SimpleChart _networkValuesChart;
+        private readonly SimpleChart _networkPolicyChart;
         private readonly PictureBox _pictureBox;
         private readonly GroupBox _redAgentGroupBox;
         private readonly Mcts _redMcts;
@@ -67,17 +68,27 @@ namespace Connect4
             LoadAgentsIntoRadioButtons(_redAgentGroupBox);
             Controls.Add(_redAgentGroupBox);
 
-            _networkValuesChart = new SimpleChart
+            _networkPolicyChart = new SimpleChart
             {
                 Location = new Point(0, 370),
                 Size = new Size(500, 220),
+                Title = "Network Policy/Value"
             };
-            Controls.Add(_networkValuesChart);
+            Controls.Add(_networkPolicyChart);
 
-            _mctsValuesChart = new SimpleChart
+            _mctsPolicyChart = new SimpleChart
             {
                 Location = new Point(0, 600),
                 Size = new Size(500, 220),
+                Title = "MCTS Policy"
+            };
+            Controls.Add(_mctsPolicyChart);
+
+            _mctsValuesChart = new SimpleChart
+            {
+                Location = new Point(510, 600),
+                Size = new Size(500, 220),
+                Title = "MCTS Values"
             };
             Controls.Add(_mctsValuesChart);
 
@@ -109,7 +120,7 @@ namespace Connect4
                 return;
             }
 
-            _networkValuesChart.ClearData();
+            _networkPolicyChart.ClearData();
 
             var boardArray = _game.GameBoard.StateToArray().Select(x => (double)x).ToArray();
             double[]? policyOutput = null;
@@ -140,29 +151,28 @@ namespace Connect4
                     chartValues.Add(($"V{i}", valueOutput[i]));
                 }
             }
-            _networkValuesChart.SetValues(chartValues);
+            _networkPolicyChart.SetValues(chartValues);
 
             var mcts = new Mcts(400, _selectedAgent.ValueNetwork, _selectedAgent.PolicyNetwork);
             int previousPlayer = _game.CurrentPlayer == 1 ? 2 : 1;
             mcts.MaxIterations = (int)_maxIterationsSelector.Value;
             Node rootNode = mcts.CalculateRootNode(_game.GameBoard, previousPlayer, 2.4);
 
-            _mctsValuesChart.ClearData();
+            _mctsPolicyChart.ClearData();
 
+            var mctsPolicies = new List<(string, double)>();
             var mctsValues = new List<(string, double)>();
             if (policyOutput != null)
             {
                 for (int i = 0; i < rootNode.Children.Count; i++)
                 {
                     var child = rootNode.Children[i];
-                    mctsValues.Add(($"P{child.Move}", child.Visits / rootNode.Visits));
+                    mctsPolicies.Add(($"P{child.Move}", child.Visits / rootNode.Visits));
+                    mctsValues.Add(($"V{child.Move}", child.Wins ) );
                 }
             }
 
-            if (valueOutput != null)
-            {
-                mctsValues.Add(($"V", rootNode.Children.OrderByDescending(x => x.Visits/ rootNode.Visits).First().Wins));
-            }
+            _mctsPolicyChart.SetValues(mctsPolicies);
             _mctsValuesChart.SetValues(mctsValues);
         }
 

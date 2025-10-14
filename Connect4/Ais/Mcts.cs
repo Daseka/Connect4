@@ -13,7 +13,7 @@ public class Mcts(
     private const int MaxColumnCount = 7;
     private const double MinimumPolicyValue = 0.001;
     private readonly Random _random = random ?? new();
-    private readonly TelemetryHistory _telemetryHistory = new();
+    private readonly TrainingBuffer _trainingBuffer = new();
     private Node? _rootNode;
 
     public int MaxIterations { get; set; } = maxIterations;
@@ -66,7 +66,7 @@ public class Mcts(
             Backpropagate(childNode, result);
         }
         stopwatch.Stop();
-        UpdateTelemetryHistoryVisits(rootNode, _telemetryHistory);
+        UpdateTrainingBufferVisits(rootNode, _trainingBuffer);
 
         var bestChild = rootNode.GetMostVisitsChild(movesPlayed, isDeterministic);
         if (bestChild != null)
@@ -79,14 +79,14 @@ public class Mcts(
         return Task.FromResult(bestChild?.Move ?? -1);
     }
 
-    public TelemetryHistory GetTelemetryHistory()
+    public TrainingBuffer GetTrainingBuffer()
     {
-        return _telemetryHistory;
+        return _trainingBuffer;
     }
 
-    public void SetWinnerTelemetryHistory(Winner winner)
+    public void SetWinnerTrainingBuffer(Winner winner)
     {
-        _telemetryHistory.StoreWinnerData(winner);
+        _trainingBuffer.StoreWinnerData(winner);
     }
 
     private static void Backpropagate(Node node, double result)
@@ -257,7 +257,7 @@ public class Mcts(
         return DeepSimulation(node, valueNetwork);
     }
 
-    private static void UpdateTelemetryHistoryVisits(Node root, TelemetryHistory telemetryHistory)
+    private static void UpdateTrainingBufferVisits(Node root, TrainingBuffer trainingBuffer)
     {
         double[] policy = new double[MaxColumnCount];
         foreach (Node child in root.Children)
@@ -271,25 +271,7 @@ public class Mcts(
             return;
         }
 
-        telemetryHistory.StoreTempData(root.GameBoard, policy);
-    }
-
-    private static void UpdateTelemetryHistoryWins(Node root, TelemetryHistory telemetryHistory)
-    {
-        double[] policy = new double[MaxColumnCount];
-        foreach (Node child in root.Children)
-        {
-            double totalWins = root.Wins == 0 ? 1 : root.Wins;
-            policy[child.Move] = Math.Max(child.Wins / totalWins, MinimumPolicyValue);
-        }
-
-        // if the policy is all zero then dont store it because it means no moves are posible from this node
-        if (policy.Sum() == 0)
-        {
-            return;
-        }
-
-        telemetryHistory.StoreTempData(root.GameBoard, policy);
+        trainingBuffer.StoreTempData(root.GameBoard, policy);
     }
 
     private Node FindRootNode(GameBoard gameBoard, int previousPlayer)

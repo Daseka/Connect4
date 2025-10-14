@@ -261,7 +261,7 @@ namespace Connect4
             PictureBox pictureBox,
             Stack<string> moveHistory)
         {
-            mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
+            mcts.SetWinnerTrainingBuffer(connect4Game.Winner);
             connect4Game.ResetGame();
             pictureBox.Invoke(pictureBox.Refresh);
             moveHistory.Clear();

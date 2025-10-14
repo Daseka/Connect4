@@ -84,7 +84,7 @@ public class Node
             if (roundedUcb > currentMaxUcb)
             {
                 currentMaxUcb = roundedUcb;
-                bestChildren = [node];
+                        bestChildren = [node];
             }
             else if (roundedUcb == currentMaxUcb)
             {
