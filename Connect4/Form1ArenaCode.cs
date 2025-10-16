@@ -15,12 +15,13 @@ public partial class Form1 : Form
     private const int DeepLearningThreshold = 55;
     private const int DeepLearningThresholdMin = 35;
     private const double ErrorConfidence = 1.96;
-    private const double ExplorationConstant = 2.40;
+    private const double ExplorationConstant = 1.40;
     private const int McstIterations = 400;
-    private const int MovingAverageSize = 10;
+    private const int MovingAverageSize = 50;
     private const int SelfPlayGames = 300;
     private const string Unknown = "Random";
     private const int VsGames = 100;
+    private const int VirtualEpochCount = 5;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -469,19 +470,22 @@ public partial class Form1 : Form
         string pStop = string.Empty;
 
         
-        //int steps = Math.Max(1, trainingData.Length / MiniBatchNetworkTrainer.BatchSize);
+        int steps = (int)Math
+            .Max(1, (VirtualEpochCount * (_trainingBuffer.Count + _replayBuffer.Count * 0.2))/ MiniBatchNetworkTrainer.BatchSize);
 
         //while (i < steps || _trainingSet.Count > TelemetryHistory.MaxBufferSize /2)
         //while(i < steps || trainingData.Length > 100000)
-        while (i < 1000)
+
+
+        while (i < steps )
         {
             i++;
 
             (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = _trainingBuffer
-            .GetTrainingDataNewFirst((int)(_trainingBuffer.NewEntries * 1.5));
+                .GetTrainingDataRandom((int)(MiniBatchNetworkTrainer.BatchSize * 0.8));
 
             (double[][] trainingData2, double[][] policyExpectedData2, double[][] valueExpectedData2) = _replayBuffer
-                .GetTrainingDataRandom((int)(_trainingBuffer.NewEntries * 0.75));
+                .GetTrainingDataRandom((int)(MiniBatchNetworkTrainer.BatchSize * 0.2));
 
             trainingData = [.. trainingData, .. trainingData2];
             policyExpectedData = [.. policyExpectedData, .. policyExpectedData2];
@@ -577,7 +581,7 @@ public partial class Form1 : Form
                 valueStopEarly = true;
             }
 
-            if (!policyStopEarly && consecutiveIncreasesPolicyError >= ConsecutiveIncreaseLimit)
+            if (!policyStopEarly && (consecutiveIncreasesPolicyError >= ConsecutiveIncreaseLimit ))
             {
                 Invoke(() =>
                 {

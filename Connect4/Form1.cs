@@ -65,7 +65,9 @@ public partial class Form1 : Form
         _currentAgent = _agentCatalog.GetLatestAgents(1).FirstOrDefault();
 
         IStandardNetwork valueNetwork = _currentAgent?.ValueNetwork ?? _oldValueNetwork;
+        valueNetwork.Trained = true;
         IStandardNetwork policyNetwork = _currentAgent?.PolicyNetwork ?? _oldPolicyNetwork;
+        policyNetwork.Trained = true;
 
         _yellowMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
         _redMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());

@@ -115,45 +115,43 @@ namespace Connect4
 
         private async void CalculateButton_Click(object? sender, EventArgs e)
         {
-            if (_selectedAgent == null)
+            if (_selectedAgent != null)
             {
-                return;
-            }
+                _networkPolicyChart.ClearData();
 
-            _networkPolicyChart.ClearData();
-
-            var boardArray = _game.GameBoard.StateToArray().Select(x => (double)x).ToArray();
-            double[]? policyOutput = null;
-            double[]? valueOutput = null;
-            if (_selectedAgent.PolicyNetwork != null)
-            {
-                policyOutput = _selectedAgent.PolicyNetwork.Calculate(boardArray);
-            }
-
-            if (_selectedAgent.ValueNetwork != null)
-            {
-                valueOutput = _selectedAgent.ValueNetwork.Calculate(boardArray);
-            }
-
-            // Display both outputs in chart (policy first, then value if present)
-            var chartValues = new List<(string, double)>();
-            if (policyOutput != null)
-            {
-                for (int i = 0; i < policyOutput.Length; i++)
+                var boardArray = _game.GameBoard.StateToArray().Select(x => (double)x).ToArray();
+                double[]? policyOutput = null;
+                double[]? valueOutput = null;
+                if (_selectedAgent.PolicyNetwork != null)
                 {
-                    chartValues.Add(($"P{i}", policyOutput[i]));
+                    policyOutput = _selectedAgent.PolicyNetwork.Calculate(boardArray);
                 }
-            }
-            if (valueOutput != null)
-            {
-                for (int i = 0; i < valueOutput.Length; i++)
-                {
-                    chartValues.Add(($"V{i}", valueOutput[i]));
-                }
-            }
-            _networkPolicyChart.SetValues(chartValues);
 
-            var mcts = new Mcts(400, _selectedAgent.ValueNetwork, _selectedAgent.PolicyNetwork);
+                if (_selectedAgent.ValueNetwork != null)
+                {
+                    valueOutput = _selectedAgent.ValueNetwork.Calculate(boardArray);
+                }
+
+                // Display both outputs in chart (policy first, then value if present)
+                var chartValues = new List<(string, double)>();
+                if (policyOutput != null)
+                {
+                    for (int i = 0; i < policyOutput.Length; i++)
+                    {
+                        chartValues.Add(($"P{i}", policyOutput[i]));
+                    }
+                }
+                if (valueOutput != null)
+                {
+                    for (int i = 0; i < valueOutput.Length; i++)
+                    {
+                        chartValues.Add(($"V{i}", valueOutput[i]));
+                    }
+                }
+                _networkPolicyChart.SetValues(chartValues);
+            }
+
+            var mcts = new Mcts(400, _selectedAgent?.ValueNetwork, _selectedAgent?.PolicyNetwork);
             int previousPlayer = _game.CurrentPlayer == 1 ? 2 : 1;
             mcts.MaxIterations = (int)_maxIterationsSelector.Value;
             Node rootNode = mcts.CalculateRootNode(_game.GameBoard, previousPlayer, 2.4);
@@ -162,14 +160,12 @@ namespace Connect4
 
             var mctsPolicies = new List<(string, double)>();
             var mctsValues = new List<(string, double)>();
-            if (policyOutput != null)
+
+            for (int i = 0; i < rootNode.Children.Count; i++)
             {
-                for (int i = 0; i < rootNode.Children.Count; i++)
-                {
-                    var child = rootNode.Children[i];
-                    mctsPolicies.Add(($"P{child.Move}", child.Visits / rootNode.Visits));
-                    mctsValues.Add(($"V{child.Move}", child.Wins ) );
-                }
+                var child = rootNode.Children[i];
+                mctsPolicies.Add(($"P{child.Move}", child.Visits / rootNode.Visits));
+                mctsValues.Add(($"V{child.Move}", child.Wins));
             }
 
             _mctsPolicyChart.SetValues(mctsPolicies);

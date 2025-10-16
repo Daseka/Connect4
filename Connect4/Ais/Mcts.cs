@@ -196,7 +196,7 @@ public class Mcts(
         }
 
         // Return win value
-        return previousPlayer == 1 ? 1 : 0;
+        return previousPlayer == node.PLayerWhoMadeMove ? 1 : -1;
     }
 
     private static Node Select(Node node, Random random, double explorationFactor)

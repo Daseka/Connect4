@@ -213,13 +213,15 @@ public class TrainingBuffer
     public virtual void LoadFromFile()
     {
         ClearAll();
+        DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
+        string filePath = Path.Combine(directoryInfo.FullName, FileName);
 
-        if (!File.Exists(FileName))
+        if (!File.Exists(filePath))
         {
             return;
         }
 
-        string json = File.ReadAllText(FileName);
+        string json = File.ReadAllText(filePath);
         TrainingBuffer? loaded = JsonConvert.DeserializeObject<TrainingBuffer>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];

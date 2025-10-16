@@ -4,14 +4,14 @@ namespace Connect4.GameParts;
 
 public class ReplayBuffer: TrainingBuffer
 {
-    private const string BufferFolder = "Buffers";
-    private const string BufferFileName = "replayBuffer.json";
+    private const string Folder = "Buffers";
+    private const string FileName = "replayBuffer.json";
 
     public override void SaveToFile()
     {
-        DirectoryInfo directoryInfo = Directory.CreateDirectory(BufferFolder);
+        DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
 
-        string filePath = Path.Combine(directoryInfo.FullName, BufferFileName);
+        string filePath = Path.Combine(directoryInfo.FullName, FileName);
         string json = JsonConvert.SerializeObject(this, Formatting.Indented);
 
         File.WriteAllText(filePath, json);
@@ -20,13 +20,15 @@ public class ReplayBuffer: TrainingBuffer
     public override void LoadFromFile()
     {
         ClearAll();
+        DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
+        string filePath = Path.Combine(directoryInfo.FullName, FileName);
 
-        if (!File.Exists(BufferFileName))
+        if (!File.Exists(filePath))
         {
             return;
         }
 
-        string json = File.ReadAllText(BufferFileName);
+        string json = File.ReadAllText(filePath);
         TrainingBuffer? loaded = JsonConvert.DeserializeObject<TrainingBuffer>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
