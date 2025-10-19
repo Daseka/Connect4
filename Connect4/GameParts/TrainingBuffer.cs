@@ -3,9 +3,9 @@ using Newtonsoft.Json;
 namespace Connect4.GameParts;
 
 [Serializable]
-public class TrainingBuffer
+public class TrainingBuffer : ITrainingBuffer
 {
-    public const int MaxBufferSize = 300000;
+    public const int MaxBufferSize = 600000;
     private const string Folder = "Buffers";
     private const string FileName = "trainingBuffer.json";
 
@@ -109,12 +109,12 @@ public class TrainingBuffer
             if (info.Draws == 1)
             {
                 winValue = [0];
-            }   
+            }
             else if (info.RedWins == 1 && boardStateArray.Last() == 1 || info.YellowWins == 1 && boardStateArray.Last() == 0)
             {
                 winValue = [1];
             }
-            else 
+            else
             {
                 winValue = [-1];
             }
@@ -227,7 +227,7 @@ public class TrainingBuffer
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
     }
 
-    public void MergeFrom(TrainingBuffer other)
+    public void MergeFrom(ITrainingBuffer other)
     {
         if (other == null)
         {
@@ -242,13 +242,28 @@ public class TrainingBuffer
         EnforceBufferLimit();
     }
 
+    public void MergeFrom(IEnumerable<BoardStateHistoricInfo> others)
+    {
+        if (others == null || !others.Any())
+        {
+            return;
+        }
+
+        foreach (BoardStateHistoricInfo info in others)
+        {
+            StoreInfo(info);
+        }
+
+        EnforceBufferLimit();
+    }
+
     public virtual void SaveToFile()
     {
         DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
 
         string filePath = Path.Combine(directoryInfo.FullName, FileName);
         string json = JsonConvert.SerializeObject(this, Formatting.Indented);
-            
+
         File.WriteAllText(filePath, json);
     }
 

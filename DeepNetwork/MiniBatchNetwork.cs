@@ -100,8 +100,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             _activations[i] = i == structure.Length - 1 && Softmax
                 //? new SigmoidActivationFunction()
                 ? new SoftMaxActivationFunction()
-                : new TanhActivationFunction();
-            //: new LeakyReLUActivationFunction());
+                //: new TanhActivationFunction();
+                : new LeakyReLUActivationFunction();
         }
     }
 

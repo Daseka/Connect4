@@ -13,7 +13,7 @@ public class Mcts(
     private const int MaxColumnCount = 7;
     private const double MinimumPolicyValue = 0.001;
     private readonly Random _random = random ?? new();
-    private readonly TrainingBuffer _trainingBuffer = new();
+    private readonly ITrainingBuffer _trainingBuffer = new TrainingBuffer();
     private Node? _rootNode;
 
     public int MaxIterations { get; set; } = maxIterations;
@@ -79,7 +79,7 @@ public class Mcts(
         return Task.FromResult(bestChild?.Move ?? -1);
     }
 
-    public TrainingBuffer GetTrainingBuffer()
+    public ITrainingBuffer GetTrainingBuffer()
     {
         return _trainingBuffer;
     }
@@ -197,6 +197,7 @@ public class Mcts(
 
         // Return win value
         return previousPlayer == node.PLayerWhoMadeMove ? 1 : -1;
+        //return previousPlayer == 1 ? 1 : 0;
     }
 
     private static Node Select(Node node, Random random, double explorationFactor)
@@ -257,7 +258,7 @@ public class Mcts(
         return DeepSimulation(node, valueNetwork);
     }
 
-    private static void UpdateTrainingBufferVisits(Node root, TrainingBuffer trainingBuffer)
+    private static void UpdateTrainingBufferVisits(Node root, ITrainingBuffer trainingBuffer)
     {
         double[] policy = new double[MaxColumnCount];
         foreach (Node child in root.Children)

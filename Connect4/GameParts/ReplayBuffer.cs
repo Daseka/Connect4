@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 
 namespace Connect4.GameParts;
 
+[Serializable]
 public class ReplayBuffer: TrainingBuffer
 {
     private const string Folder = "Buffers";
@@ -29,7 +30,7 @@ public class ReplayBuffer: TrainingBuffer
         }
 
         string json = File.ReadAllText(filePath);
-        TrainingBuffer? loaded = JsonConvert.DeserializeObject<TrainingBuffer>(json);
+        TrainingBuffer? loaded = JsonConvert.DeserializeObject<ReplayBuffer>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
     }

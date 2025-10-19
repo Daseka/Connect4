@@ -17,16 +17,15 @@ public partial class Form1 : Form
     private const double ErrorConfidence = 1.96;
     private const double ExplorationConstant = 1.40;
     private const int McstIterations = 400;
-    private const int MovingAverageSize = 50;
-    private const int SelfPlayGames = 300;
+    private const int MovingAverageSize = 20;
+    private const int SelfPlayGames = 1000;
     private const string Unknown = "Random";
     private const int VsGames = 100;
-    private const int VirtualEpochCount = 5;
+    private const int VirtualEpochCount = 10;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
-    private readonly TrainingBuffer _trainingBuffer = new();
-    private readonly ReplayBuffer _replayBuffer = new();
+    private readonly ITrainingBuffer _trainingBuffer = new TrainingBuffer();
     private readonly List<double> _yellowPercentHistory = [];
     private Agent? _currentAgent;
     private double _drawPercent;
@@ -121,7 +120,7 @@ public partial class Form1 : Form
 
                     championsRemaining = championAgents.Count;
 
-                    AdjustTrainingSetAndReplayBuffer();
+                    //AdjustTrainingSetAndReplayBuffer();
 
                     _ = BeginInvoke(() =>
                     {
@@ -147,7 +146,7 @@ public partial class Form1 : Form
             else
             {
                 _currentAgent = championAgents.First();
-                championsRemaining = Math.Min(championAgents.Count, ChampionsToPlay);
+                championsRemaining = championAgents.Count;
 
                 _ = BeginInvoke(() =>
                 {
@@ -156,23 +155,6 @@ public partial class Form1 : Form
                 });
             }
         }
-    }
-
-    private void AdjustTrainingSetAndReplayBuffer()
-    {
-        // Move 20% of the most recent training set to the replay buffer
-        int count = (int)(_trainingBuffer.BoardStateHistoricalInfos.Count * 0.2);
-        if (count > 0)
-        {
-            var trainingBuffer = new TrainingBuffer();
-            foreach (var entry in _trainingBuffer.BoardStateHistoricalInfos.Skip(_trainingBuffer.BoardStateHistoricalInfos.Count - count))
-            {
-                trainingBuffer.BoardStateHistoricalInfos.Enqueue(entry);
-            }
-            _replayBuffer.MergeFrom(trainingBuffer);
-        }
-
-        _trainingBuffer.ClearAll();
     }
 
     private static Agent CreateAgent(double explorationFactor, Mcts mcts, Agent? previousAgent)
@@ -304,7 +286,7 @@ public partial class Form1 : Form
             });
         }
 
-        var sharedTrainingBuffer = new TrainingBuffer();
+        ITrainingBuffer sharedTrainingBuffer = new TrainingBuffer();
         var tasks = new List<Task>();
         var globalStats = new ConcurrentDictionary<int, (int Red, int Yellow, int Draw, int Total)>();
         int gameCount = 0;
@@ -362,7 +344,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries} Replay: {_replayBuffer.Count}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries}";
 
                                 panel.RecordResult(Winner.Draw);
                                 pictureBox.Refresh();
@@ -397,7 +379,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries} Replay: {_replayBuffer.Count}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries}";
 
                                 panel.RecordResult((Winner)winner);
                                 pictureBox.Refresh();
@@ -415,7 +397,7 @@ public partial class Form1 : Form
 
                 lock (sharedTrainingBuffer)
                 {
-                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries} Replay: {_replayBuffer.Count}");
+                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries}");
 
                     _trainingBuffer.MergeFrom(redMcts.GetTrainingBuffer());
                     _trainingBuffer.MergeFrom(yellowMcts.GetTrainingBuffer());
@@ -469,27 +451,17 @@ public partial class Form1 : Form
         string vStop = string.Empty;
         string pStop = string.Empty;
 
-        
-        int steps = (int)Math
-            .Max(1, (VirtualEpochCount * (_trainingBuffer.Count + _replayBuffer.Count * 0.2))/ MiniBatchNetworkTrainer.BatchSize);
-
-        //while (i < steps || _trainingSet.Count > TelemetryHistory.MaxBufferSize /2)
-        //while(i < steps || trainingData.Length > 100000)
 
 
-        while (i < steps )
+        int steps = Math.Max(1, VirtualEpochCount * Math.Min(TrainingBuffer.MaxBufferSize,_trainingBuffer.Count) / MiniBatchNetworkTrainer.BatchSize);
+
+        (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = _trainingBuffer
+                .GetTrainingDataRandom(_trainingBuffer.Count);
+
+        //while (i <  VirtualEpochCount || (_trainingBuffer.Count > TrainingBuffer.MaxBufferSize / 2 && i < VirtualEpochCount * 2))
+        while (i < VirtualEpochCount)
         {
             i++;
-
-            (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = _trainingBuffer
-                .GetTrainingDataRandom((int)(MiniBatchNetworkTrainer.BatchSize * 0.8));
-
-            (double[][] trainingData2, double[][] policyExpectedData2, double[][] valueExpectedData2) = _replayBuffer
-                .GetTrainingDataRandom((int)(MiniBatchNetworkTrainer.BatchSize * 0.2));
-
-            trainingData = [.. trainingData, .. trainingData2];
-            policyExpectedData = [.. policyExpectedData, .. policyExpectedData2];
-            valueExpectedData = [.. valueExpectedData, .. valueExpectedData2];
 
             if (!valueStopEarly)
             {
@@ -570,7 +542,7 @@ public partial class Form1 : Form
                 previousMovingAveragePolicyError = movingAveragePolicyError;
             }
 
-            if (!valueStopEarly && consecutiveIncreasesValueError >= ConsecutiveIncreaseLimit)
+            if ( !valueStopEarly &&(valueError < 0.05 || consecutiveIncreasesValueError >= ConsecutiveIncreaseLimit))
             {
                 Invoke(() =>
                 {
@@ -581,7 +553,7 @@ public partial class Form1 : Form
                 valueStopEarly = true;
             }
 
-            if (!policyStopEarly && (consecutiveIncreasesPolicyError >= ConsecutiveIncreaseLimit ))
+            if (!policyStopEarly && (policyError < 0.05 || consecutiveIncreasesPolicyError >= ConsecutiveIncreaseLimit ))
             {
                 Invoke(() =>
                 {
@@ -709,7 +681,7 @@ public partial class Form1 : Form
             });
         }
 
-        var sharedTrainingBuffer = new TrainingBuffer();
+        ITrainingBuffer sharedTrainingBuffer = new TrainingBuffer();
         var tasks = new List<Task>();
         var globalStats = new ConcurrentDictionary<int, (int redWins, int yellowWins, int drawWins, int totalWins)>();
         int gameCount = 0;
@@ -765,7 +737,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries} Replay: {_replayBuffer.Count}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries}";
 
                                 panel.RecordResult(Winner.Draw);
                                 pictureBox.Refresh();
@@ -802,7 +774,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries} Replay: {_replayBuffer.Count}";
+                                Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries}";
 
                                 panel.RecordResult((Winner)winner);
                             });
@@ -822,7 +794,7 @@ public partial class Form1 : Form
 
                 lock (sharedTrainingBuffer)
                 {
-                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries} Replay: {_replayBuffer.Count}");
+                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_trainingBuffer.Count} New: {_trainingBuffer.NewEntries}");
 
                     _trainingBuffer.MergeFrom(redMcts.GetTrainingBuffer());
                     _trainingBuffer.MergeFrom(yellowMcts.GetTrainingBuffer());

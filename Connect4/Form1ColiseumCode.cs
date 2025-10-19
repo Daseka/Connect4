@@ -95,7 +95,7 @@ public partial class Form1 : Form
             });
         }
 
-        var sharedTrainingBuffer = new TrainingBuffer();
+        ITrainingBuffer sharedTrainingBuffer = new TrainingBuffer();
         var tasks = new List<Task>();
         var globalStats = new ConcurrentDictionary<int, (int Red, int Yellow, int Draw, int Total)>();
 
