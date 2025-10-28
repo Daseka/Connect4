@@ -20,14 +20,35 @@ public class Mcts(
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
     public IStandardNetwork? ValueNetwork { get; set; } = valueNetwork;
 
+    public Node CalculateRootNode(GameBoard gameBoard, int previousPlayer, double explorationFactor)
+    {
+        Node rootNode = FindRootNode(gameBoard, previousPlayer);
+        bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
+
+        for (int i = 0; i < MaxIterations; i++)
+        {
+            Node? childNode = useNetworks
+                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, true)
+                : Select(rootNode, _random, explorationFactor);
+
+            double result = useNetworks
+                ? Simulate(childNode, ValueNetwork!)
+                : Simulate(childNode, _random);
+
+            Backpropagate(childNode, result);
+        }
+
+        return rootNode;
+    }
+
     public Task<int> GetBestMove(
-        GameBoard gameBoard,
+            GameBoard gameBoard,
         int previousPlayer,
         double explorationFactor,
         int movesPlayed,
         bool isDeterministic = false)
     {
-        var rootNode = FindRootNode(gameBoard, previousPlayer);
+        Node rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
         var stopwatch = Stopwatch.StartNew();
@@ -44,10 +65,11 @@ public class Mcts(
 
             Backpropagate(childNode, result);
         }
+
         stopwatch.Stop();
         UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
-        var bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
+        Node? bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
         if (bestChild != null)
         {
             bestChild.Parent = null;
@@ -175,7 +197,7 @@ public class Mcts(
         }
 
         // Return win value
-        return previousPlayer == 1 ? 1 : 0;
+        return previousPlayer == node.PLayerWhoMadeMove ? 1 : -1;
     }
 
     private static Node Select(Node node, Random random, double explorationFactor)
@@ -256,7 +278,7 @@ public class Mcts(
     private Node FindRootNode(GameBoard gameBoard, int previousPlayer)
     {
         List<Node> children = _rootNode?.Children ?? [];
-        foreach (var childNode in children)
+        foreach (Node childNode in children)
         {
             if (childNode.GameBoard.StateToString() == gameBoard.StateToString())
             {

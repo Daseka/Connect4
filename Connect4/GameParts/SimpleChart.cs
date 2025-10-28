@@ -14,7 +14,7 @@ namespace Connect4.GameParts
         private readonly Pen _redPen = new(Color.Silver, 2);
         private readonly Pen _yellowPen = new(Color.FromArgb(101, 53, 1), 2);
         private readonly Pen _drawPen = new(Color.FromArgb(23, 82, 85), 2);
-        private readonly Pen _gridPen = new(Color.Black);//FromArgb(30, 30, 30), 1);
+        private readonly Pen _gridPen = new(Color.Black);
         private readonly Brush _backgroundBrush = new SolidBrush(Color.Black);
         private readonly Brush _textBrush = new SolidBrush(Color.White);
         private readonly Font _titleFont = new("Arial", 12, FontStyle.Bold);
@@ -27,6 +27,8 @@ namespace Connect4.GameParts
         public double YMax { get; set; } = 100;
         public double DeepLearnThreshold { get; set; } = 55;
         public List<bool> PositionsRedNetworkBetter { get; set; } = [];
+
+        private List<(string label, double value)> _barValues = new();
 
         public SimpleChart()
         {
@@ -56,68 +58,84 @@ namespace Connect4.GameParts
             Invalidate();
         }
 
+        public void SetValues(List<(string label, double value)> values)
+        {
+            _barValues = values;
+            Invalidate();
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            
             Graphics g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            
             g.FillRectangle(_backgroundBrush, ClientRectangle);
-            
             int leftMargin = 60;
             int rightMargin = 40;
             int topMargin = 50;
             int bottomMargin = 50;
-            
+
             Rectangle chartArea = new Rectangle(
                 leftMargin,
                 topMargin,
                 Width - leftMargin - rightMargin,
                 Height - topMargin - bottomMargin
             );
-            
             SizeF titleSize = g.MeasureString(Title, _titleFont);
-            g.DrawString(Title, _titleFont, _textBrush, 
-                (Width - titleSize.Width) / 2, 10);
-            
+            g.DrawString(Title, _titleFont, _textBrush, (Width - titleSize.Width) / 2, 10);
+
+            // Draw Y axis label
             g.TranslateTransform(15, chartArea.Y + chartArea.Height / 2);
             g.RotateTransform(-90);
-
             SizeF yLabelSize = g.MeasureString(YAxisLabel, _axisFont);
             g.DrawString(YAxisLabel, _axisFont, _textBrush, -yLabelSize.Width / 2, 0);
             g.ResetTransform();
-            
+
+            // Draw X axis label
             SizeF xLabelSize = g.MeasureString(XAxisLabel, _axisFont);
-            g.DrawString(XAxisLabel, _axisFont, _textBrush, 
-                chartArea.X + (chartArea.Width - xLabelSize.Width) / 2, 
-                chartArea.Bottom + 30);
-            
+            g.DrawString(XAxisLabel, _axisFont, _textBrush, chartArea.X + (chartArea.Width - xLabelSize.Width) / 2, chartArea.Bottom + 30);
             g.DrawRectangle(Pens.LightGray, chartArea);
-            
             int gridLines = 5;
+            double yMin = _barValues.Count > 0 ? Math.Min(0, _barValues.Min(v => v.value)) : YMin;
+            double yMax = _barValues.Count > 0 ? Math.Max(1, _barValues.Max(v => v.value)) : YMax;
+            bool isLineChart = _redPoints.Count > 0;
+
             for (int i = 0; i <= gridLines; i++)
             {
-                double value = YMin + (YMax - YMin) * i / gridLines;
-                int redY;
-                if (YMax == YMin)
+                double value = yMin + (yMax - yMin) * i / gridLines;
+                int y = chartArea.Bottom - (int)((value - yMin) / (yMax - yMin) * chartArea.Height);
+                g.DrawLine(_gridPen, chartArea.Left, y, chartArea.Right, y);
+                if (isLineChart)
                 {
-                    // If YMax == YMin, distribute grid lines evenly
-                    redY = chartArea.Bottom - (int)((double)i / gridLines * chartArea.Height);
+                    string label = value.ToString("F0");
+                    SizeF labelSize = g.MeasureString(label, _axisFont);
+                    g.DrawString(label, _axisFont, _textBrush, chartArea.Left - labelSize.Width - 5, y - labelSize.Height / 2);
+                    g.DrawString(label, _axisFont, _textBrush, chartArea.Left + chartArea.Width + 30 - labelSize.Width, y - labelSize.Height / 2);
                 }
-                else
-                {
-                    redY = chartArea.Bottom - (int)((value - YMin) / (YMax - YMin) * chartArea.Height);
-                }
-                
-                g.DrawLine(_gridPen, chartArea.Left, redY, chartArea.Right, redY);
-                
-                string label = value.ToString("F0");
-                SizeF labelSize = g.MeasureString(label, _axisFont);
-                g.DrawString(label, _axisFont, _textBrush, chartArea.Left - labelSize.Width - 5, redY - labelSize.Height / 2);
-                g.DrawString(label, _axisFont, _textBrush, chartArea.Left + chartArea.Width + 30 - labelSize.Width, redY - labelSize.Height / 2);
             }
-
+            // Draw bars if _barValues is set
+            if (_barValues.Count > 0)
+            {
+                int barCount = _barValues.Count;
+                int barWidth = Math.Max(10, chartArea.Width / (barCount * 2));
+                int spacing = (chartArea.Width - barCount * barWidth) / (barCount + 1);
+                for (int i = 0; i < barCount; i++)
+                {
+                    var (label, value) = _barValues[i];
+                    int x = chartArea.Left + spacing + i * (barWidth + spacing);
+                    int y = chartArea.Bottom - (int)((value - yMin) / (yMax - yMin) * chartArea.Height);
+                    int barHeight = chartArea.Bottom - y;
+                    g.FillRectangle(Brushes.DodgerBlue, x, y, barWidth, barHeight);
+                    g.DrawRectangle(Pens.White, x, y, barWidth, barHeight);
+                    // Draw value above bar
+                    string valueLabel = value.ToString("F2");
+                    SizeF valueSize = g.MeasureString(valueLabel, _axisFont);
+                    g.DrawString(valueLabel, _axisFont, _textBrush, x + (barWidth - valueSize.Width) / 2, y - valueSize.Height - 2);
+                    // Draw label below bar
+                    SizeF labelSize = g.MeasureString(label, _axisFont);
+                    g.DrawString(label, _axisFont, _textBrush, x + (barWidth - labelSize.Width) / 2, chartArea.Bottom + 5);
+                }
+            }
             // Draw data points and lines
             if (_redPoints.Count > 0)
             {
@@ -222,4 +240,4 @@ namespace Connect4.GameParts
             base.Dispose(disposing);
         }
     }
-} 
+}
