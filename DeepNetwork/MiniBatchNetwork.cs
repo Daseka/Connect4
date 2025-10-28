@@ -100,7 +100,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             _activations[i] = i == structure.Length - 1 && Softmax
                 //? new SigmoidActivationFunction()
                 ? new SoftMaxActivationFunction()
-                : new TanhActivationFunction();
+                //: new TanhActivationFunction();
+                : new SigmoidActivationFunction();
             //: new LeakyReLUActivationFunction());
         }
     }
@@ -306,7 +307,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                         // Cross-entropy loss for softmax outputs
                         double p = Math.Max(target, NearNullValue);
                         double q = Math.Max(outputValue, NearNullValue);
-                        batchErrorSum += p * Math.Log(p / q);
+                        //batchErrorSum += p * Math.Log(p / q);
+                        batchErrorSum += -p * Math.Log(q);
                     }
                     else
                     {

@@ -13,8 +13,10 @@ public partial class Form1 : Form
     private readonly Connect4Game _editorConnect4Game = new();
     private readonly List<GamePanel> _gamePanels = [];
 
-    private readonly int[] policyArray = [127, 512, 256, 128, 64, 7];
-    private readonly int[] valueArray = [127, 512, 256, 128, 64, 1];
+    //private readonly int[] policyArray = [127, 512, 256, 128, 64, 7];
+    //private readonly int[] valueArray = [127, 512, 256, 128, 64, 1];
+    private readonly int[] valueArray = [127, 256, 128, 64, 32, 1];
+    private readonly int[] policyArray = [127, 256, 128, 64, 32, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
     private CancellationTokenSource _coliseimCancelationSource = new();
     private int _gamesPlayed = 0;
