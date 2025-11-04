@@ -14,6 +14,7 @@ namespace Connect4
         private const string HumanVsHuman = "Human vs Human";
         private const int IncomingPort = 101;
         private const string RemoteVsAi = "Remote vs AI";
+        private const double ExplorationFactor = 1.68;
         private readonly AgentCatalog _agentCatalog;
         private readonly List<Bitmap> _boardStateHistory = [];
         private readonly Connect4Game _game = new();
@@ -399,7 +400,7 @@ namespace Connect4
 
         private async Task PerformAiMove(Mcts mcts)
         {
-            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
             _ = _game.PlacePieceColumn(aiMove);
             _pictureBox.Refresh();
 
@@ -420,7 +421,7 @@ namespace Connect4
 
         private async Task<int> PerformAiMoveOnly(Mcts mcts)
         {
-            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+            int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
 
             _ = _game.PlacePieceColumn(aiMove);
             _pictureBox.Refresh();
@@ -540,7 +541,7 @@ namespace Connect4
             {
                 mcts = _game.CurrentPlayer == 1 ? _redMcts : _yellowMcts;
                 int aiMove = await mcts
-                    .GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, 1.0, _moveHistory.Count, true);
+                    .GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
 
                 _ = _game.PlacePieceColumn(aiMove);
                 _pictureBox.Refresh();

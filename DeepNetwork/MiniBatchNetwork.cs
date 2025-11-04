@@ -12,7 +12,7 @@ namespace DeepNetwork;
 
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
-    private const double LearningRate = 0.001;
+    private const double LearningRate = 0.01;
     private const double NearNullValue = 1e-11d;
 
     private readonly IActivationFunction[] _activations;
@@ -97,13 +97,19 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
         for (int i = 0; i < structure.Length; i++)
         {
-            _activations[i] = i == structure.Length - 1 && Softmax
-                //? new SigmoidActivationFunction()
-                ? new SoftMaxActivationFunction()
-                //: new TanhActivationFunction();
-                : new SigmoidActivationFunction();
-            //: new LeakyReLUActivationFunction());
-        }
+            if (i == structure.Length - 1)
+            {
+                _activations[i] = Softmax
+                    ? new SoftMaxActivationFunction()
+                    : new TanhActivationFunction();
+            }
+            else
+            {
+                _activations[i] = new LeakyReLUActivationFunction();
+                //_activations[i] = new TanhActivationFunction();
+                //_activations[i] = new SigmoidActivationFunction();
+            }
+       }
     }
 
     public static IStandardNetwork? CreateFromFile(string fileName)

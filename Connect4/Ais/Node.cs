@@ -183,9 +183,7 @@ public class Node
     {
         ++Visits;
 
-        Wins += result > 0
-            ? Math.Round(result, 4)
-            : Math.Round(result, 4);
+        Wins += result;
     }
 
     public double[] GetValueCached(IStandardNetwork valueNetwork)

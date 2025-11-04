@@ -13,8 +13,8 @@ public partial class Form1 : Form
     private readonly Connect4Game _editorConnect4Game = new();
     private readonly List<GamePanel> _gamePanels = [];
 
-    //private readonly int[] policyArray = [127, 512, 256, 128, 64, 7];
-    //private readonly int[] valueArray = [127, 512, 256, 128, 64, 1];
+    //private readonly int[] policyArray = [127, 2048, 512, 256, 64, 7];
+    //private readonly int[] valueArray = [127, 2048, 512, 256, 64, 1];
     private readonly int[] valueArray = [127, 256, 128, 64, 32, 1];
     private readonly int[] policyArray = [127, 256, 128, 64, 32, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
@@ -64,10 +64,10 @@ public partial class Form1 : Form
 
         _agentCatalog = new AgentCatalog(AgentCatalogSize);
         _agentCatalog.LoadCatalog();
-        _currentAgent = _agentCatalog.GetLatestAgents(1).FirstOrDefault();
+        _teacherAgent = _agentCatalog.GetLatestAgents(1).FirstOrDefault();
 
-        IStandardNetwork valueNetwork = _currentAgent?.ValueNetwork ?? _oldValueNetwork;
-        IStandardNetwork policyNetwork = _currentAgent?.PolicyNetwork ?? _oldPolicyNetwork;
+        IStandardNetwork valueNetwork = _teacherAgent?.ValueNetwork ?? _oldValueNetwork;
+        IStandardNetwork policyNetwork = _teacherAgent?.PolicyNetwork ?? _oldPolicyNetwork;
 
         _yellowMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
         _redMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
@@ -157,7 +157,8 @@ public partial class Form1 : Form
                 _arenaCancelationSource = new CancellationTokenSource();
                 _isBattleArenaRunning = true;
                 button5.Text = "Stop Arena";
-                _ = Task.Run(BattleArena);
+                //_ = Task.Run(BattleArena);
+                _ = Task.Run(BattleArenaAlternate);
             }
         }
         catch (Exception ex)

@@ -5,8 +5,12 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TelemetryHistory
 {
+    public const double Win = 1.0;
+    public const double Loss = 0.0;
+    public const double Draw = 0.5;
     public const int MaxBufferSize = 300000;
-    private const string TelemetryHistoryFileName = "telemetry\\telemetry_history.json";
+    private const string Folder = "Buffers";
+    private const string FileName = "TrainingData.json";
 
     private readonly Dictionary<string, List<double[]>> _policies = [];
     private readonly Random _random = new();
@@ -87,6 +91,43 @@ public class TelemetryHistory
         return (inputs, policies, values);
     }
 
+    public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingDataSimple(int count = 0)
+    {
+        var all = BoardStateHistoricalInfos.ToList();
+        int finalCount = Math.Min(count, all.Count);
+        var chosen = new List<BoardStateHistoricInfo>(finalCount);
+
+        // Convert to arrays
+        var inputs = new double[finalCount][];
+        var policies = new double[finalCount][];
+        var values = new double[finalCount][];
+
+        for (int i = 0; i < finalCount; i++)
+        {
+            BoardStateHistoricInfo info = all[i];
+            double[] boardStateArray = [.. BitKey.ToArray(info.BoardState).Select(x => (double)x)];
+            inputs[i] = boardStateArray;
+            policies[i] = [.. info.Policy];
+            double[] winValue;
+            if (info.Draws == 1)
+            {
+                winValue = [Draw];
+            }
+            else if (info.RedWins == 1 && boardStateArray[^1] == 1 || info.YellowWins == 1 && boardStateArray[^1] == 0)
+            {
+                winValue = [Win];
+            }
+            else
+            {
+                winValue = [Loss];
+            }
+
+            values[i] = winValue;
+        }
+
+        return (inputs, policies, values);
+    }
+
     public (double[][] input, double[][] policyOutput, double[][] valueOutput) GetTrainingDataRandom(int count = 0)
     {
         var all = BoardStateHistoricalInfos.ToList();
@@ -107,15 +148,15 @@ public class TelemetryHistory
             double[] winValue;
             if (info.Draws == 1)
             {
-                winValue = [0];
+                winValue = [Draw];
             }   
             else if (info.RedWins == 1 && boardStateArray.Last() == 1 || info.YellowWins == 1 && boardStateArray.Last() == 0)
             {
-                winValue = [1];
+                winValue = [Win];
             }
             else 
             {
-                winValue = [-1];
+                winValue = [Loss];
             }
 
             values[i] = winValue;
@@ -192,15 +233,15 @@ public class TelemetryHistory
             double[] winValue;
             if (info.Draws == 1)
             {
-                winValue = [0];
+                winValue = [Draw];
             }
             else if (info.RedWins == 1 && boardStateArray.Last() == 1 || info.YellowWins == 1 && boardStateArray.Last() == 0)
             {
-                winValue = [1];
+                winValue = [Win];
             }
             else
             {
-                winValue = [-1];
+                winValue = [Loss];
             }
 
             values[i] = winValue;
@@ -212,13 +253,15 @@ public class TelemetryHistory
     public void LoadFromFile()
     {
         ClearAll();
+        DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
+        string filePath = Path.Combine(directoryInfo.FullName, FileName);
 
-        if (!File.Exists(TelemetryHistoryFileName))
+        if (!File.Exists(filePath))
         {
             return;
         }
 
-        string json = File.ReadAllText(TelemetryHistoryFileName);
+        string json = File.ReadAllText(filePath);
         TelemetryHistory? loaded = JsonConvert.DeserializeObject<TelemetryHistory>(json);
 
         BoardStateHistoricalInfos = loaded?.BoardStateHistoricalInfos ?? [];
@@ -241,8 +284,11 @@ public class TelemetryHistory
 
     public void SaveToFile()
     {
+        DirectoryInfo directoryInfo = Directory.CreateDirectory(Folder);
+        string filePath = Path.Combine(directoryInfo.FullName, FileName);
+
         string json = JsonConvert.SerializeObject(this, Formatting.Indented);
-        File.WriteAllText(TelemetryHistoryFileName, json);
+        File.WriteAllText(filePath, json);
     }
 
     public void StoreTempData(GameBoard gameBoard, double[] policy)
@@ -267,8 +313,9 @@ public class TelemetryHistory
             {
                 var info = new BoardStateHistoricInfo(item.Key)
                 {
+                    PlayerLastPlayed = BitKey.ToArray(item.Key)[^1],
                     Policy = [.. policyValues]
-                };
+                }; 
 
                 if (winner == Winner.Red)
                 {
