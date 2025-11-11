@@ -26,7 +26,7 @@ namespace Connect4.GameParts
         public double YMin { get; set; } = 0;
         public double YMax { get; set; } = 100;
         public double DeepLearnThreshold { get; set; } = 55;
-        public List<bool> PositionsRedNetworkBetter { get; set; } = [];
+        public List<Color> PositionsRedNetworkBetter { get; set; } = [];
 
         private List<(string label, double value)> _barValues = new();
 
@@ -186,9 +186,7 @@ namespace Connect4.GameParts
                 
                 for (int i = 0; i < redPoints.Length; i++)
                 {
-                    Color pointColor = PositionsRedNetworkBetter[i]
-                        ? Color.FromArgb(0, 255, 0) 
-                        : Color.FromArgb(255, 0, 0);
+                    Color pointColor = PositionsRedNetworkBetter[i];
                     g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);
                 }
             }

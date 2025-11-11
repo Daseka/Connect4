@@ -69,8 +69,8 @@ public partial class Form1 : Form
         IStandardNetwork valueNetwork = _teacherAgent?.ValueNetwork ?? _oldValueNetwork;
         IStandardNetwork policyNetwork = _teacherAgent?.PolicyNetwork ?? _oldPolicyNetwork;
 
-        _yellowMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
-        _redMcts = new Mcts(McstIterations, valueNetwork.Clone(), policyNetwork.Clone());
+        _yellowMcts = new Mcts(MctsIterations, valueNetwork.Clone(), policyNetwork.Clone());
+        _redMcts = new Mcts(MctsIterations, valueNetwork.Clone(), policyNetwork.Clone());
 
         flowLayoutPanel1.BackColor = Color.Black;
         flowLayoutPanel1.BorderStyle = BorderStyle.None;
@@ -323,7 +323,7 @@ public partial class Form1 : Form
             _isParallelSelfPlayRunning = true;
             toolStripStatusLabel1.Text = "Starting parallel self-play...";
 
-            _ = Task.Run(() => VsPlayParallel(_redMcts, _yellowMcts, McstIterations, explorationFactor: ExplorationConstant));
+            _ = Task.Run(() => VsPlayParallel(_redMcts, _yellowMcts, MctsIterations, explorationFactor: ExplorationConstant));
         }
     }
 

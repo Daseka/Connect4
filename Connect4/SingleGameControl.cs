@@ -543,8 +543,11 @@ namespace Connect4
                 int aiMove = await mcts
                     .GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
 
-                _ = _game.PlacePieceColumn(aiMove);
-                _pictureBox.Refresh();
+                Invoke(() =>
+                {
+                    _ = _game.PlacePieceColumn(aiMove);
+                    _pictureBox.Refresh();
+                });
 
                 UpdateBoardStateHistory();
 

@@ -8,7 +8,7 @@ public class TelemetryHistory
     public const double Win = 1.0;
     public const double Loss = 0.0;
     public const double Draw = 0.5;
-    public const int MaxBufferSize = 300000;
+    public const int MaxBufferSize = 150000;
     private const string Folder = "Buffers";
     private const string FileName = "TrainingData.json";
 

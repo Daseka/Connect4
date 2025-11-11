@@ -2,6 +2,7 @@
 using Connect4.GameParts;
 using DeepNetwork;
 using DeepNetwork.NetworkIO;
+using System.CodeDom;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
@@ -16,11 +17,11 @@ public partial class Form1 : Form
     private const int DeepLearningThresholdMin = 35;
     private const double ErrorConfidence = 1.96;
     private const double ExplorationConstant = 1.68;
-    private const int McstIterations = 400;
-    private const int MovingAverageSize = 4;
+    private const int MctsIterations = 400;
+    private const int MovingAverageSize = 2;
     private const int SelfPlayGames = 200;
     private const string Unknown = "Random";
-    private const int VsGames = 200;
+    private const int VsGames = 500;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -83,7 +84,7 @@ public partial class Form1 : Form
 
                 // Train a new red network
                 stopwatch = Stopwatch.StartNew();
-                trainedAgent = nextAgent ?? new Mcts(McstIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
+                trainedAgent = nextAgent ?? new Mcts(MctsIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
                 _ = await TrainAsync(trainedAgent);
                 stopwatch.Stop();
 
@@ -120,7 +121,7 @@ public partial class Form1 : Form
                     championAgents = _agentCatalog.GetLatestAgents(ChampionsToPlay);
                     _teacherAgent = championAgents.First();
 
-                    _yellowMcts = new Mcts(McstIterations, _teacherAgent.ValueNetwork?.Clone(), _teacherAgent.PolicyNetwork?.Clone());
+                    _yellowMcts = new Mcts(MctsIterations, _teacherAgent.ValueNetwork?.Clone(), _teacherAgent.PolicyNetwork?.Clone());
 
                     _telemetryHistory.ClearAll();
 
@@ -169,86 +170,104 @@ public partial class Form1 : Form
         ResetChart();
 
         int i = 0;
-        var randomMcts = new Mcts(McstIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
-        double bestGame1 = 0;
-        double bestGame2 = 0;
+        double previousImprovementGame1 = 0;
+        double previousImprovementGame2 = 0;
 
-        double bestPreviousIsBetterGame1 = 0;
-        double bestPreviousIsBetterGame2 = 0;
+        double previousBetterGame1 = 0;
+        double previousBetterGame2 = 0;
 
         int consecutiveLossFactor = 1;
 
-        Agent challengerAgent = _agentCatalog.GetLatestAgents(1).FirstOrDefault()
-            ?? CreateAgent(ExplorationConstant, randomMcts, null);
+        var randomMcts = new Mcts(MctsIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
 
-        Mcts trainedMcts = challengerAgent.ToMctsCloned(McstIterations);
+        if (_agentCatalog.Entries.Count == 0)
+        {
+            _agentCatalog.Add(CreateAgent(ExplorationConstant, randomMcts, null));
+        }
+
+        Agent strongestAgent = _agentCatalog.GetLatestAgents(1).First();
+        Agent challengerAgent = strongestAgent.Clone();
+
+        Mcts trainedMcts = challengerAgent.ToMctsCloned(MctsIterations);
         trainedMcts.PolicyNetwork!.Trained = true;
         trainedMcts.ValueNetwork!.Trained = true;
-        _teacherAgent = CreateAgent(ExplorationConstant, randomMcts, _teacherAgent);
 
         List<Agent> champions = [.. _agentCatalog.Entries.Values];
-        int championToPlayAgainst = champions.Count -1;
-        _yellowMcts = new Mcts(McstIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
+        int championToPlayAgainst = champions.Count;
 
+        _teacherAgent = strongestAgent.Clone();
+
+        _yellowMcts = champions[0].ToMctsCloned(MctsIterations);
 
         while (i < ArenaIterations && !_arenaCancelationSource.IsCancellationRequested)
         {
             i++;
+            championToPlayAgainst--;
+
+            //_yellowMcts = champions[championToPlayAgainst].ToMctsCloned(MctsIterations);
 
             // 1 Evaluate the trained network
+            AddToListBox($"Challenger vs Champion {champions.Count - championToPlayAgainst} / {champions.Count}");
             var stopwatch2 = Stopwatch.StartNew();
             _telemetryHistory.BeginAddingNewEntries();
             Agent trainedAgent = CreateAgent(ExplorationConstant, trainedMcts, challengerAgent);
             (bool isImproved, bool isBetter, double currentGame1, double currentGame2) = await EvaluateAgentAlternate(
                 trainedAgent,
-                bestGame1,
-                bestGame2,
-                VsGames * consecutiveLossFactor);
+                previousImprovementGame1,
+                previousImprovementGame2,
+                previousBetterGame1,
+                previousBetterGame2,
+                true,
+                VsGames);
             stopwatch2.Stop();
-
             AddToListBox($"Evaluation done in {stopwatch2.ElapsedMilliseconds} ms");
 
-            if (isBetter && (bestPreviousIsBetterGame1 + bestPreviousIsBetterGame2) / 2 < (currentGame1 + currentGame2) / 2)
+            //if (isBetter && championToPlayAgainst > 0)
+            //{
+            //    AddToListBox($"Challenger better than Champion {champions.Count - championToPlayAgainst} / {champions.Count}");
+            //    continue;
+            //}
+
+            if (isBetter )
             {
-                bestPreviousIsBetterGame1 = currentGame1;
-                bestPreviousIsBetterGame2 = currentGame2;
-                bestGame1 = 0;
-                bestGame2 = 0;
+                previousBetterGame1 = currentGame1;
+                previousBetterGame2 = currentGame2;
+                previousImprovementGame1 = 0;
+                previousImprovementGame2 = 0;
                 consecutiveLossFactor = 1;
 
-                _redMcts = trainedMcts;
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
+                
+                _teacherAgent = challengerAgent.Clone();
+                _agentCatalog.Add(challengerAgent.Clone());
 
-                _agentCatalog.Add(challengerAgent);
                 champions = [.. _agentCatalog.Entries.Values];
 
-                _teacherAgent = challengerAgent;
-                _yellowMcts = new Mcts(McstIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
-
-                AddToListBox($"Challenger is better changing Teacher network");
+                AddToListBox($"Challenger better changing Teacher");
             }
             else if (isImproved)
             {
-                bestGame1 = currentGame1;
-                bestGame2 = currentGame2;
+                previousImprovementGame1 = currentGame1;
+                previousImprovementGame2 = currentGame2;
                 consecutiveLossFactor = 1;
 
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
-                _yellowMcts = new Mcts(McstIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
 
-                AddToListBox($"Challenger network improved upgrading challenger");
+                AddToListBox($"Challenger improved Upgrading");
             }
             else
             {
                 consecutiveLossFactor = consecutiveLossFactor < 5 ? consecutiveLossFactor + 1 : consecutiveLossFactor;
-                AddToListBox("Challenger network not better try again");
+                AddToListBox("Challenger not better try again");
             }
+            
+            championToPlayAgainst = champions.Count;
 
-            //// 2 play a minimum amont of self play games to refresh the telemetry history
-            //var stopwatch = Stopwatch.StartNew();
-            //_telemetryHistory.BeginAddingNewEntries();
-            //await SelfPlayParallel(_teacherAgent, SelfPlayGames * consecutiveLossFactor);
-            //stopwatch.Stop();
+            // 2 play a minimum amont of self play games to refresh the telemetry history
+            var stopwatch = Stopwatch.StartNew();
+            _telemetryHistory.BeginAddingNewEntries();
+            await SelfPlayParallel(_teacherAgent, SelfPlayGames * consecutiveLossFactor);
+            stopwatch.Stop();
 
             if (_arenaCancelationSource.IsCancellationRequested)
             {
@@ -259,7 +278,7 @@ public partial class Form1 : Form
 
             // 3 Train a new red network
             var stopwatch3 = Stopwatch.StartNew();
-            trainedMcts = challengerAgent.ToMctsCloned(McstIterations);
+            trainedMcts = challengerAgent.ToMctsCloned(MctsIterations);
             _ = await TrainAsync(trainedMcts);
             stopwatch3.Stop();
 
@@ -307,7 +326,7 @@ public partial class Form1 : Form
         AddToListBox(string.Empty);
         AddToListBox($"Playing Challenger Vs Champ {_teacherAgent?.Generation}");
 
-        (_, _, int draw, int total) = await VsPlayParallel(trainedRedMcts!, _yellowMcts, McstIterations, ExplorationConstant);
+        (_, _, int draw, int total) = await VsPlayParallel(trainedRedMcts!, _yellowMcts, MctsIterations, ExplorationConstant);
         double agent1Game1 = _redWithDrawPercent;
         double agent2Game1 = _yellowWithDrawPercent;
         int draws = draw;
@@ -318,7 +337,7 @@ public partial class Form1 : Form
         // Now Evaluate the current agent against the trained network
         AddToListBox($"Playing Champ {_teacherAgent?.Generation} Vs Challenger");
 
-        (_, _, draw, total) = await VsPlayParallel(_yellowMcts, trainedRedMcts!, McstIterations, ExplorationConstant);
+        (_, _, draw, total) = await VsPlayParallel(_yellowMcts, trainedRedMcts!, MctsIterations, ExplorationConstant);
         double agent1Game2 = _yellowWithDrawPercent;
         double agent2Game2 = _redWithDrawPercent;
         draws += draw;
@@ -345,15 +364,22 @@ public partial class Form1 : Form
             && agent2Min + marginOfError < agent1Min
             && (agent1Min * 100) > DeepLearningThresholdMin;
 
-        UpdatePercentChart(DeepLearningThreshold, isBetter);
+        TrainingProgress progress = isBetter
+            ? TrainingProgress.IsBetter
+            : TrainingProgress.IsFailed;
+
+        UpdatePercentChart(DeepLearningThreshold, progress);
 
         return isBetter;
     }
 
     private async Task<(bool isImproved, bool isBetter, double currentGame1, double currentGame2)> EvaluateAgentAlternate(
         Agent trainedAgent,
-        double bestGame1,
-        double bestGame2,
+        double improvementGame1,
+        double improvementGame2,
+        double betterGame1,
+        double betterGame2,
+        bool isFinalEvaluation,
         int vsGames)
     {
         // Evaluate the trained network against the current agent
@@ -361,12 +387,12 @@ public partial class Form1 : Form
         AddToListBox(string.Empty);
         AddToListBox($"Playing Challenger {trainedAgent?.Generation} Vs Champ");
 
-        var trainedMcts = trainedAgent.ToMcts(McstIterations);
+        var trainedMcts = trainedAgent.ToMcts(MctsIterations);
 
         (_, _, _, _) = await VsPlayParallel(
             trainedMcts,
             _yellowMcts,
-            McstIterations,
+            MctsIterations,
             ExplorationConstant,
             vsGames);
 
@@ -382,7 +408,7 @@ public partial class Form1 : Form
         (_, _, _, _) = await VsPlayParallel(
             _yellowMcts,
             trainedMcts,
-            McstIterations,
+            MctsIterations,
             ExplorationConstant,
             vsGames);
 
@@ -394,7 +420,7 @@ public partial class Form1 : Form
         //Draw the chart
         double redPercentAfterTraining = Math.Min(agent1Game2, agent1Game1);
         double yellowPercentAfterTraining = Math.Min(agent2Game2, agent2Game1);
-        double drawPercentBestLine = Math.Min(bestGame1, bestGame2);
+        double drawPercentBestLine = Math.Min(improvementGame1, improvementGame2);
         _redPercentHistory.Add(redPercentAfterTraining);
         _yellowPercentHistory.Add(yellowPercentAfterTraining);
         _drawPercentHistory.Add(drawPercentBestLine);
@@ -403,17 +429,34 @@ public partial class Form1 : Form
 
         // Check if the new agent better than the previous agent on the other side
         double agent1Min = Math.Min(agent1Game1, agent1Game2) / 100;
-        double agent1Max = Math.Max(agent1Game1, agent1Game2) / 100;
         double agent2Min = Math.Min(agent2Game1, agent2Game2) / 100;
-        double agent2Max = Math.Max(agent2Game1, agent2Game2) / 100;
-        double bestMin = Math.Min(bestGame1, bestGame2) / 100;
-        double bestMax = Math.Max(bestGame1, bestGame2) / 100;
+        double bestMin = Math.Min(improvementGame1, improvementGame2) / 100;
 
         double marginOfError = ErrorConfidence * Math.Sqrt(agent1Min * (1 - agent1Min) / vsGames);
-        bool isImproved = bestMin + marginOfError < agent1Min || bestMax + marginOfError < agent1Max;
-        bool isBetter = agent2Min + marginOfError < agent1Min || agent2Max + marginOfError < agent1Max;
+        bool isImproved = bestMin + marginOfError < agent1Min;
+        bool isBetter = agent2Min + 2 * marginOfError < agent1Min
+            && (betterGame1 + betterGame2) / 2 < (agent1Game1 + agent1Game2) / 2
+            && agent1Min >= 0.30;
 
-        UpdatePercentChart(DeepLearningThreshold, isBetter || isImproved);
+        TrainingProgress progress;
+        if (isBetter && isFinalEvaluation)
+        {
+            progress = TrainingProgress.IsBetterSignificantly;
+        }
+        else if (isBetter)
+        {
+            progress = TrainingProgress.IsBetter;
+        }
+        else if(isImproved)
+        {
+            progress = TrainingProgress.IsImproved;
+        }
+        else
+        {
+            progress = TrainingProgress.IsFailed;
+        }
+
+        UpdatePercentChart(DeepLearningThreshold, progress);
 
         return (isImproved, isBetter, agent1Game1, agent1Game2);
     }
@@ -476,8 +519,8 @@ public partial class Form1 : Form
                 CompactConnect4Game game = panel.Game;
                 PictureBox pictureBox = panel.PictureBox;
 
-                var redMcts = new Mcts(McstIterations, agent.ValueNetwork!.Clone(), agent.PolicyNetwork!.Clone());
-                var yellowMcts = new Mcts(McstIterations, agent.ValueNetwork.Clone(), agent.PolicyNetwork.Clone());
+                var redMcts = new Mcts(MctsIterations, agent.ValueNetwork!.Clone(), agent.PolicyNetwork!.Clone());
+                var yellowMcts = new Mcts(MctsIterations, agent.ValueNetwork.Clone(), agent.PolicyNetwork.Clone());
 
                 while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
                 {
@@ -509,7 +552,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
+                                Text = $"{gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
 
                                 panel.RecordResult(Winner.Draw);
                                 pictureBox.Refresh();
@@ -544,7 +587,7 @@ public partial class Form1 : Form
                             _ = BeginInvoke(() =>
                             {
                                 gameCount++;
-                                Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
+                                Text = $"{gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}";
 
                                 panel.RecordResult((Winner)winner);
                                 pictureBox.Refresh();
@@ -562,7 +605,7 @@ public partial class Form1 : Form
 
                 lock (sharedTelemetryHistory)
                 {
-                    _ = BeginInvoke(() => Text = $"Games played {gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
+                    _ = BeginInvoke(() => Text = $"{gameCount}/{totalGames} Data: {_telemetryHistory.Count} New: {_telemetryHistory.NewEntries}");
 
                     _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
                     _telemetryHistory.MergeFrom(yellowMcts.GetTelemetryHistory());
@@ -606,8 +649,8 @@ public partial class Form1 : Form
 
         int movingAveragePolicy = MovingAverageSize;
 
-        int sampleSize = _telemetryHistory.Count;
-        int steps = Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize);
+        int steps =  _telemetryHistory.Count * 150;
+            //Math.Max(1, sampleSize / MiniBatchNetworkTrainer.BatchSize);
 
         // moving average for value is larger because it fluctuates more
         int movingAverageValue = movingAveragePolicy;
@@ -615,7 +658,7 @@ public partial class Form1 : Form
         // Get all new entries plus a little bit of the old entries or a random sample of the entire history
         (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
             //.GetTrainingDataRandom(_telemetryHistory.NewEntries);
-            .GetTrainingDataSimple(_telemetryHistory.Count);
+            .GetTrainingDataRandom(_telemetryHistory.Count);
 
         int i = -1;
         string vStop = string.Empty;
@@ -628,6 +671,8 @@ public partial class Form1 : Form
             //(double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = Random.Shared.NextBoolean()
             //    ? telemetryHistory.GetTrainingDataRandom(_telemetryHistory.NewEntries)
             //    : telemetryHistory.GetTrainingDataNewFirst(_telemetryHistory.NewEntries);
+
+            
 
             if (!valueStopEarly)
             {
@@ -667,7 +712,7 @@ public partial class Form1 : Form
             {
                 double movingAverageValueError = valueErrorHistory.Average();
 
-                if (movingAverageValueError > previousMovingAverageValueError)
+                if (movingAverageValueError >= previousMovingAverageValueError)
                 {
                     consecutiveIncreasesValueError++;
                 }
@@ -685,7 +730,7 @@ public partial class Form1 : Form
             {
                 double movingAveragePolicyError = policyErrorHistory.Average();
 
-                if (movingAveragePolicyError > previousMovingAveragePolicyError)
+                if (movingAveragePolicyError >= previousMovingAveragePolicyError)
                 {
                     consecutiveIncreasesPolicyError++;
                 }
@@ -777,9 +822,9 @@ public partial class Form1 : Form
                 _yellowWithDrawPercent = Math.Round(_yellowPercent + _drawPercent / 2, 2);
 
                 Text = $"{totalGames}/{totalGamesToPlay} - " +
-                    $"R: {_redPercent:F2}% ({_redWithDrawPercent:F2}%)" +
-                    $"Y: {_yellowPercent:F2}% ({_yellowWithDrawPercent:F2}%)" +
-                    $"D: {_drawPercent:F2}% " +
+                    $"R: {_redWithDrawPercent:F0}%" +
+                    $"Y: {_yellowWithDrawPercent:F0}%" +
+                    $"D: {_drawPercent:F0}% " +
                     $"Data: {_telemetryHistory.Count}";
 
                 int progressPercent = (int)(totalGames / (double)totalGamesToPlay * 100);
@@ -788,18 +833,27 @@ public partial class Form1 : Form
         });
     }
 
-    private void UpdatePercentChart(int deepLearningThreshold, bool isBetter)
+    private void UpdatePercentChart(int deepLearningThreshold, TrainingProgress progress)
     {
         if (_redPercentHistory.Count == 0)
         {
             return;
         }
 
+        Color dotColor = progress switch
+        {
+            TrainingProgress.IsBetterSignificantly => Color.FromArgb(164,83,255),
+            TrainingProgress.IsBetter => Color.FromArgb(0,255,0),
+            TrainingProgress.IsImproved => Color.FromArgb(200,200,200),
+            TrainingProgress.IsFailed => Color.FromArgb(255,0,0),
+            _ => Color.Black,
+        };
+
         Invoke(() =>
         {
             winPercentChart.ClearData();
             winPercentChart.DeepLearnThreshold = deepLearningThreshold;
-            winPercentChart.PositionsRedNetworkBetter.Add(isBetter);
+            winPercentChart.PositionsRedNetworkBetter.Add(dotColor);
 
             for (int i = 0; i < _redPercentHistory.Count; i++)
             {

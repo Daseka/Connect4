@@ -112,8 +112,8 @@ public partial class Form1 : Form
             {
                 try
                 {
-                    var redMcts = new Mcts(McstIterations, agent1.ValueNetwork, agent1.PolicyNetwork);
-                    var yellowMcts = new Mcts(McstIterations, agent2.ValueNetwork, agent2.PolicyNetwork);
+                    var redMcts = new Mcts(MctsIterations, agent1.ValueNetwork, agent1.PolicyNetwork);
+                    var yellowMcts = new Mcts(MctsIterations, agent2.ValueNetwork, agent2.PolicyNetwork);
 
                     int gamesPlayed = 0;
                     int redWins = 0;
