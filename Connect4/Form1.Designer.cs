@@ -28,12 +28,12 @@
         /// </summary>
         private void InitializeComponent()
         {
+            var resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             tabControl1 = new CustomTabControl();
             tabPage1 = new TabPage();
-            pictureBox1 = new PictureBox();
-            listBox1 = new ListBox();
-            button1 = new Button();
-            button4 = new Button();
+            textBox2 = new TextBox();
+            button2 = new Button();
+            textBox3 = new TextBox();
             button5 = new Button();
             button6 = new Button();
             winPercentChart = new Connect4.GameParts.SimpleChart();
@@ -44,13 +44,11 @@
             button7 = new Button();
             label1 = new Label();
             tabPage3 = new TabPage();
+            tabPage4 = new TabPage();
             statusStrip1 = new StatusStrip();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            button2 = new Button();
-            tabPage4 = new TabPage();
             tabControl1.SuspendLayout();
             tabPage1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             statusStrip1.SuspendLayout();
@@ -72,11 +70,9 @@
             // 
             // tabPage1
             // 
+            tabPage1.Controls.Add(textBox2);
             tabPage1.Controls.Add(button2);
-            tabPage1.Controls.Add(pictureBox1);
-            tabPage1.Controls.Add(listBox1);
-            tabPage1.Controls.Add(button1);
-            tabPage1.Controls.Add(button4);
+            tabPage1.Controls.Add(textBox3);
             tabPage1.Controls.Add(button5);
             tabPage1.Controls.Add(button6);
             tabPage1.Controls.Add(winPercentChart);
@@ -89,44 +85,31 @@
             tabPage1.Text = "Game";
             tabPage1.UseVisualStyleBackColor = true;
             // 
-            // pictureBox1
+            // textBox2
             // 
-            pictureBox1.BackColor = Color.Black;
-            pictureBox1.Location = new Point(6, 36);
-            pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(613, 328);
-            pictureBox1.TabIndex = 0;
-            pictureBox1.TabStop = false;
+            textBox2.Location = new Point(6, 36);
+            textBox2.Multiline = true;
+            textBox2.Name = "textBox2";
+            textBox2.Size = new Size(665, 319);
+            textBox2.TabIndex = 13;
+            // 
+            // button2
+            // 
+            button2.Location = new Point(1109, 11);
+            button2.Name = "button2";
+            button2.Size = new Size(75, 23);
+            button2.TabIndex = 12;
+            button2.Text = "Coleseum";
+            button2.UseVisualStyleBackColor = true;
+            button2.Click += Coliseum_Click;
             // 
             // listBox1
             // 
-            listBox1.FormattingEnabled = true;
-            listBox1.ItemHeight = 15;
-            listBox1.Location = new Point(700, 36);
-            listBox1.Name = "listBox1";
-            listBox1.ScrollAlwaysVisible = true;
-            listBox1.Size = new Size(624, 319);
-            listBox1.TabIndex = 2;
-            // 
-            // button1
-            // 
-            button1.Location = new Point(700, 11);
-            button1.Name = "button1";
-            button1.Size = new Size(75, 23);
-            button1.TabIndex = 3;
-            button1.Text = "Reset game";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += ResetButton_Click;
-            // 
-            // button4
-            // 
-            button4.Location = new Point(922, 11);
-            button4.Name = "button4";
-            button4.Size = new Size(100, 23);
-            button4.TabIndex = 6;
-            button4.Text = "Self play";
-            button4.UseVisualStyleBackColor = true;
-            button4.Click += SelfPlayButton_Click;
+            textBox3.Location = new Point(700, 36);
+            textBox3.Name = "listBox1";
+            textBox3.Multiline = true;
+            textBox3.Size = new Size(624, 319);
+            textBox3.TabIndex = 2;
             // 
             // button5
             // 
@@ -155,6 +138,7 @@
             winPercentChart.DeepLearnThreshold = 55D;
             winPercentChart.Location = new Point(6, 370);
             winPercentChart.Name = "winPercentChart";
+            winPercentChart.PositionsRedNetworkBetter = (List<Color>)resources.GetObject("winPercentChart.PositionsRedNetworkBetter");
             winPercentChart.Size = new Size(1318, 200);
             winPercentChart.TabIndex = 10;
             winPercentChart.Text = "Win Rate History";
@@ -261,16 +245,6 @@
             toolStripStatusLabel1.Size = new Size(39, 17);
             toolStripStatusLabel1.Text = "Ready";
             // 
-            // button2
-            // 
-            button2.Location = new Point(1109, 11);
-            button2.Name = "button2";
-            button2.Size = new Size(75, 23);
-            button2.TabIndex = 12;
-            button2.Text = "Coleseum";
-            button2.UseVisualStyleBackColor = true;
-            button2.Click += Coliseum_Click;
-            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -285,7 +259,7 @@
             FormClosing += Form1_FormClosing;
             tabControl1.ResumeLayout(false);
             tabPage1.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            tabPage1.PerformLayout();
             tabPage2.ResumeLayout(false);
             tabPage2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
@@ -302,10 +276,7 @@
         private TabPage tabPage2;
         private TabPage tabPage3;
         private TabPage tabPage4;
-        private PictureBox pictureBox1;
-        private ListBox listBox1;
-        private Button button1;
-        private Button button4;
+        private TextBox textBox3;
         private Button button5;
         private Button button6;
         private PictureBox pictureBox2;
@@ -317,5 +288,6 @@
         private Connect4.GameParts.SimpleChart winPercentChart;
         private TextBox textBox1;
         private Button button2;
+        private TextBox textBox2;
     }
 }

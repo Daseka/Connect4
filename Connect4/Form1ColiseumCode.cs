@@ -16,7 +16,7 @@ public partial class Form1 : Form
             _ = MessageBox.Show("No agents in catalog. \nRun arena to generate some agents");
         }
 
-        Agent[] agents = _agentCatalog.Entries.Values.ToArray();
+        Agent[] agents = [.. _agentCatalog.Entries.Values];
         for (int i = agents.Length - 1; i >= 0; i--)
         {
             Agent agent1 = agents[i];
@@ -24,8 +24,7 @@ public partial class Form1 : Form
             agent1.PolicyNetwork.ExplorationFactor = agent1.ExplorationFactor;
             _ = BeginInvoke(() =>
             {
-                _ = listBox1.Items.Add($"{agent1.Id} \tGen: {agent1.Generation} \tFactor: {agent1.ExplorationFactor:F2}");
-                listBox1.SelectedIndex = listBox1.Items.Count - 1;
+                textBox3.AddLine($"{agent1.Id} \tGen: {agent1.Generation} \tFactor: {agent1.ExplorationFactor:F2}");
             });
 
             for (int j = agents.Length - 1; j >= 0; j--)
@@ -52,8 +51,7 @@ public partial class Form1 : Form
                 _ = BeginInvoke(() =>
                 {
                     string mark = redWithDrawPercent > 50 ? "✔" : "╳";
-                    _ = listBox1.Items.Add($"{redWithDrawPercent:F2}% \t Gen: {agent2.Generation}  {mark}");
-                    listBox1.SelectedIndex = listBox1.Items.Count - 1;
+                    textBox3.AddLine($"{redWithDrawPercent:F2}% \t Gen: {agent2.Generation}  {mark}");
                 });
             }
         }
@@ -61,7 +59,6 @@ public partial class Form1 : Form
         _ = BeginInvoke(() =>
         {
             toolStripStatusLabel1.Text = "Coliseum completed!";
-            button4.Text = "Parallel Play";
             _isParallelSelfPlayRunning = false;
         });
     }

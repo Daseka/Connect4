@@ -15,8 +15,10 @@ public partial class Form1 : Form
 
     //private readonly int[] policyArray = [127, 2048, 512, 256, 64, 7];
     //private readonly int[] valueArray = [127, 2048, 512, 256, 64, 1];
-    private readonly int[] valueArray = [127, 256, 128, 64, 32, 1];
-    private readonly int[] policyArray = [127, 256, 128, 64, 32, 7];
+    //private readonly int[] valueArray = [127, 256, 128, 64, 1];
+    //private readonly int[] policyArray = [127, 256, 128, 64, 7];
+    private readonly int[] valueArray = [127, 256, 128, 64, 64, 64, 1];
+    private readonly int[] policyArray = [127, 256, 128, 64, 64, 64, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
     private CancellationTokenSource _coliseimCancelationSource = new();
     private int _gamesPlayed = 0;
@@ -30,17 +32,17 @@ public partial class Form1 : Form
     private Mcts _redMcts;
     private Mcts _yellowMcts;
 
-    //private readonly int[] valueArray = [127, 256, 128, 64, 32, 1];
-    //private readonly int[] policyArray = [127, 256, 128, 64, 32, 7];
     public Form1()
     {
         InitializeComponent();
 
-        //Test();
+        textBox2.BorderStyle = BorderStyle.None;
+        textBox2.BackColor = Color.Black;
+        textBox2.ForeColor = Color.Lime;
 
-        pictureBox1.Size = new Size(650, 320);
-        pictureBox1.Paint += PictureBox1_Paint;
-        pictureBox1.Click += PictureBox1_Click;
+        textBox3.BorderStyle = BorderStyle.None;
+        textBox3.BackColor = Color.Black;
+        textBox3.ForeColor = Color.Lime;
 
         // Set up the second picture box for board editor
         pictureBox2.Size = new Size(650, 320);
@@ -80,12 +82,10 @@ public partial class Form1 : Form
         toolStripStatusLabel1.BackColor = Color.Black;
         toolStripStatusLabel1.ForeColor = Color.White;
 
-        listBox1.BackColor = Color.Black;
-        listBox1.ForeColor = Color.White;
+        textBox3.BackColor = Color.Black;
+        textBox3.ForeColor = Color.White;
 
         label1.ForeColor = Color.White;
-
-        button4.Text = "Parallel Play";
 
         // In your Form1.cs constructor, after initializing tab pages:
         foreach (TabPage tabPage in tabControl1.TabPages)
@@ -243,47 +243,6 @@ public partial class Form1 : Form
         winPercentChart.ClearData();
     }
 
-    private void PictureBox1_Click(object? sender, EventArgs e)
-    {
-        var clickEvent = e as MouseEventArgs;
-        int winner = PlacePieceClick(_connect4Game, clickEvent, listBox1, pictureBox1);
-
-        if (winner != 0)
-        {
-            string color = winner == 1 ? "Red" : "Yellow";
-            _ = MessageBox.Show($"{color} Player wins!");
-
-            EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
-            return;
-        }
-
-        int compMove = _redMcts.GetBestMove(
-            _connect4Game.GameBoard,
-            _connect4Game.CurrentPlayer == 1 ? 2 : 1,
-            ExplorationConstant,
-            0,
-            true)
-            .GetAwaiter()
-            .GetResult();
-
-        winner = PlacePiece(_connect4Game, compMove, listBox1, pictureBox1);
-
-        if (winner != 0)
-        {
-            string color = winner == 1 ? "Red" : "Yellow";
-            _ = MessageBox.Show($"{color} Player wins!");
-
-            EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
-        }
-
-        if (_connect4Game.GameBoard.HasDraw())
-        {
-            _ = MessageBox.Show("It's a draw!");
-
-            EndGame(_connect4Game, _redMcts, listBox1, pictureBox1);
-        }
-    }
-
     private void PictureBox1_Paint(object? sender, PaintEventArgs e)
     {
         _connect4Game.DrawBoard(e.Graphics);
@@ -300,31 +259,6 @@ public partial class Form1 : Form
         pictureBox2.Refresh();
 
         Text = $"LastPlayed {_editorConnect4Game.GameBoard.LastPlayed}";
-    }
-
-    private void ResetButton_Click(object sender, EventArgs e)
-    {
-        _connect4Game.ResetGame();
-        pictureBox1.Refresh();
-    }
-
-    private void SelfPlayButton_Click(object sender, EventArgs e)
-    {
-        if (_isParallelSelfPlayRunning)
-        {
-            _arenaCancelationSource?.Cancel();
-            button4.Text = "Parallel Play";
-            _isParallelSelfPlayRunning = false;
-            toolStripStatusLabel1.Text = "Parallel self-play stopped";
-        }
-        else
-        {
-            button4.Text = "Stop";
-            _isParallelSelfPlayRunning = true;
-            toolStripStatusLabel1.Text = "Starting parallel self-play...";
-
-            _ = Task.Run(() => VsPlayParallel(_redMcts, _yellowMcts, MctsIterations, explorationFactor: ExplorationConstant));
-        }
     }
 
     private void Test()
