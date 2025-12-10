@@ -41,8 +41,13 @@ public class Mcts(
         return rootNode;
     }
 
+    public Mcts Clone(int? maxIterations = null)
+    {
+        return new Mcts(maxIterations ?? MaxIterations, ValueNetwork?.Clone(), PolicyNetwork?.Clone(), _random);
+    }
+
     public Task<int> GetBestMove(
-            GameBoard gameBoard,
+        GameBoard gameBoard,
         int previousPlayer,
         double explorationFactor,
         int movesPlayed,
@@ -124,7 +129,7 @@ public class Mcts(
 
         double[] winProbability = node.GetValueCached(valueNetwork);
 
-        return winProbability[0];
+        return 2 * winProbability[0] - 1;
     }
 
     private static Node Expand(Node node, Random random)

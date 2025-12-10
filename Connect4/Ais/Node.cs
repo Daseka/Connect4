@@ -67,7 +67,7 @@ public class Node
         List<Node> bestChildren = [];
         Node? winningChild = null;
 
-        double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard, ref _cachedProbability);
+        double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard);
 
         if (!isDeterministic)
         {
@@ -183,9 +183,7 @@ public class Node
     {
         ++Visits;
 
-        Wins += result > 0
-            ? Math.Round(result, 4)
-            : Math.Round(result, 4);
+        Wins += result;
     }
 
     public double[] GetValueCached(IStandardNetwork valueNetwork)
@@ -200,18 +198,17 @@ public class Node
         return _cachedValue;
     }
 
-    private static double[] GetProbabilityCached(
+    private double[] GetProbabilityCached(
         IStandardNetwork policyNetwork, 
-        GameBoard gameBoard, 
-        ref double[]? cachedProbability)
+        GameBoard gameBoard)
     {
-        if (cachedProbability is not null)
+        if (_cachedProbability is not null)
         {
-            return cachedProbability;
+            return _cachedProbability;
         }
 
-        cachedProbability = policyNetwork.Calculate([.. gameBoard.StateToArray().Select(x => (double)x)]);
+        _cachedProbability = policyNetwork.Calculate([.. gameBoard.StateToArray().Select(x => (double)x)]);
 
-        return cachedProbability;
+        return _cachedProbability;
     }
 }
