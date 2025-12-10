@@ -9,6 +9,8 @@ public class Agent
     public string? FirstKill { get; set; }
     public int Generation { get; set; } = 0;
     public string? Id { get; set; }
+    public int TeachingSessions { get; set; } = 0;
+    public double LatestWinRate { get; set; } = 0.0;
 
     [JsonIgnore]
     public IStandardNetwork? PolicyNetwork { get; set; }
@@ -33,7 +35,9 @@ public class Agent
             ExplorationFactor = ExplorationFactor,
             Generation = Generation,
             ValuePath = ValuePath,
-            PolicyPath = PolicyPath
+            PolicyPath = PolicyPath,
+            TeachingSessions = TeachingSessions,
+            LatestWinRate = LatestWinRate,
         };
 
         return clone;

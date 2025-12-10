@@ -47,7 +47,7 @@ public class Mcts(
     }
 
     public Task<int> GetBestMove(
-            GameBoard gameBoard,
+        GameBoard gameBoard,
         int previousPlayer,
         double explorationFactor,
         int movesPlayed,
