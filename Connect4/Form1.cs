@@ -15,10 +15,10 @@ public partial class Form1 : Form
 
     //private readonly int[] policyArray = [127, 2048, 512, 256, 64, 7];
     //private readonly int[] valueArray = [127, 2048, 512, 256, 64, 1];
-    //private readonly int[] valueArray = [127, 256, 128, 64, 1];
-    //private readonly int[] policyArray = [127, 256, 128, 64, 7];
-    private readonly int[] valueArray = [127, 256, 128, 64, 64, 64, 1];
-    private readonly int[] policyArray = [127, 256, 128, 64, 64, 64, 7];
+    private readonly int[] valueArray = [127, 256, 128, 64, 1];
+    private readonly int[] policyArray = [127, 256, 128, 64, 7];
+    //private readonly int[] valueArray = [127, 256, 128, 64, 64, 64, 1];
+    //private readonly int[] policyArray = [127, 256, 128, 64, 64, 64, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
     private CancellationTokenSource _coliseimCancelationSource = new();
     private int _gamesPlayed = 0;
@@ -271,7 +271,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldPolicyNetwork);
 
-        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _telemetryHistory.GetTrainingDataRandom(1000);
+        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _telemetryHistory.GetTrainingDataRandomAveragedNewFirst(_telemetryHistory.Count);
 
         double[][] inputTrain = [.. trainingData.input.Skip(100)];
         double[][] inputTest = [.. trainingData.input.Take(100)];

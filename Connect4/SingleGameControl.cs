@@ -205,7 +205,7 @@ namespace Connect4
             string startMessage = _selectedRemoteGameModes == AiVsRemote
                 ? "Starting game: AI (Red) vs Remote \n Making first move..."
                 : "Starting game: Remote vs AI (Yellow)\n Listening for move..";
-            BeginInvoke(() => _messageConsole?.AppendText($"{startMessage}" + Environment.NewLine));
+			_messageConsole?.AddLine($"{startMessage}");
 
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
@@ -214,7 +214,7 @@ namespace Connect4
                 {
                     int move = await PerformAiMoveOnly(_redMcts);
                     await communicator.SendAsync($"{move}");
-                    Invoke(() => _messageConsole?.AppendText($"Sening move:\t {move}" + Environment.NewLine));
+					_messageConsole?.AddLine($"Sening move:\t {move}");
 
                     int val = await GetRemoteResponse(communicator);
                     if (val == -1)
@@ -222,7 +222,7 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+					_messageConsole?.AddLine($"Recieved move:\t {val}");
                 }
                 else
                 {
@@ -232,11 +232,11 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+					_messageConsole?.AddLine($"Recieved move:\t {val}");
 
                     int move = await PerformAiMoveOnly(_yellowMcts);
                     await communicator.SendAsync($"{move}");
-                    Invoke(() => _messageConsole?.AppendText($"Sending move:\t {move}" + Environment.NewLine));
+					_messageConsole?.AddLine($"Sending move:\t {move}");
                 }
             }
 
@@ -512,7 +512,7 @@ namespace Connect4
                 return;
             }
 
-            _ = BeginInvoke(() => _messageConsole?.AppendText($"Connecting to {ipInfo[0]}:{port}" + Environment.NewLine));
+			_messageConsole?.AddLine($"Connecting to {ipInfo[0]}:{port}");
 
             _communicator?.Dispose();
             _communicator = new Communicator(IncomingPort, ipInfo[0], port);

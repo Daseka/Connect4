@@ -95,6 +95,11 @@ public class Mcts(
         _telemetryHistory.StoreWinnerData(winner);
     }
 
+    public void ClearTelemetryHistory()
+    {
+        _telemetryHistory.ClearAll();
+    }
+
     private static void Backpropagate(Node node, double result)
     {
         // If the result is 0, set it to a small value to enable switching between players

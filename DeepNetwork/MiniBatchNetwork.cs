@@ -12,7 +12,7 @@ namespace DeepNetwork;
 
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
-    private const double LearningRate = 0.001;
+    private const double LearningRate = 0.0008;
     private const double NearNullValue = 1e-11d;
 
     private readonly IActivationFunction[] _activations;
