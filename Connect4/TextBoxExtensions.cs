@@ -4,7 +4,7 @@ public static class TextBoxExtensions
 {
 	public static void AddLine(this TextBox textBox, string message, int maxLines = 1000, int maxChars = 100_000)
 	{
-		if (textBox.IsDisposed)
+		if (textBox.IsDisposed )
 		{
 			return;
 		}

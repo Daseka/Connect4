@@ -9,25 +9,24 @@ namespace Connect4;
 
 public partial class Form1 : Form
 {
-    private const int ArenaIterations = 300;
+    private const int ArenaIterations = 1000;
     private const int ChampionsToPlay = 6;
-    private const int ConsecutiveIncreaseLimit = 2;
     private const int DeepLearningThreshold = 55;
     private const int DeepLearningThresholdMin = 35;
     private const double ErrorConfidence = 1.95;
-    private const double ExplorationConstant = 2.48;
-    private const int MctsIterations = 1600;
-    private const int MovingAverageSize = 55;
+    private const double ExplorationConstant = 1.48;
+    private const int MctsIterations = 400;
     private const int SelfPlayGames = 1200;
+    private const int Patience = 15;
     private const string Unknown = "Random";
-    private const int VsGames = 400;
+    private const int VsGames = 500;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
     private readonly TelemetryHistory _telemetryHistory = new();
     private readonly List<double> _yellowPercentHistory = [];
-    private readonly Queue<Agent> _teacherQueue = new();
-    private const int MaxTeachingSessions = 6;
+    private readonly TeacherQueue<Agent> _teacherQueue = new();
+    private const int MaxTeachingSessions = 3;
     private const int TrainingSteps = 60;
     private double _drawPercent;
     private double _redPercent;
@@ -45,7 +44,6 @@ public partial class Form1 : Form
         Mcts? trainedAgent = null;
         Mcts? nextAgent = null;
 
-        // Get the current best agent from the catalog or create a new one if none exists
         List<Agent> championAgents = _agentCatalog.GetLatestAgents(ChampionsToPlay);
         if (championAgents.Count == 0)
         {
@@ -63,10 +61,8 @@ public partial class Form1 : Form
             i++;
             if (!skipTraining)
             {
-                // Reset New entry count telemetry history
                 _telemetryHistory.BeginAddingNewEntries();
 
-                // play a minimum amont of self play games to refresh the telemetry history
                 var stopwatch = Stopwatch.StartNew();
                 await SelfPlayParallel(_teacherAgent, SelfPlayGames);
                 stopwatch.Stop();
@@ -81,8 +77,17 @@ public partial class Form1 : Form
                     return;
                 }
 
-                // Train a new red network
                 stopwatch = Stopwatch.StartNew();
+                if (trainedAgent is not null && !ReferenceEquals(trainedAgent, _redMcts))
+                {
+                    try
+                    {
+                        trainedAgent.Dispose();
+                    }
+                    catch { }
+
+                    trainedAgent = null;
+                }
                 trainedAgent = nextAgent ?? new Mcts(MctsIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
                 _ = await TrainAsync(trainedAgent);
                 stopwatch.Stop();
@@ -95,10 +100,8 @@ public partial class Form1 : Form
 
             skipTraining = false;
 
-            // Reset New entry count telemetry history
             _telemetryHistory.BeginAddingNewEntries();
 
-            // Evaluate the trained network against the current agent
             var stopwatch2 = Stopwatch.StartNew();
             bool isBetter = await EvaluateAgent(trainedAgent);
             stopwatch2.Stop();
@@ -112,6 +115,15 @@ public partial class Form1 : Form
             {
                 if (ChampionsRemaining <= 1)
                 {
+                    if (trainedAgent is not null && !ReferenceEquals(_redMcts, trainedAgent))
+                    {
+                        try
+                        {
+                            _redMcts?.Dispose();
+                        }
+                        catch { }
+                    }
+
                     _redMcts = trainedAgent ?? _redMcts;
 
                     _agentCatalog.Add(CreateAgent(ExplorationConstant, _redMcts, championAgents.First()));
@@ -152,13 +164,14 @@ public partial class Form1 : Form
                     textBox3.AddLine($"Boss Lives {ChampionsRemaining}: boss unfased need more training");
                 });
             }
+
+            
         }
     }
 
     /// <summary>
-    /// This Arena plays only against the Random Mcts and not a Network version
+    /// Only evaluates against the Random Mcts
     /// </summary>
-    /// <returns></returns>
     public async Task BattleArenaAlternate()
     {
         ResetChart();
@@ -171,10 +184,9 @@ public partial class Form1 : Form
 
         int totalTeachers = 0;
 
-        var randomMcts = new Mcts(MctsIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
-
         if (_agentCatalog.Entries.Count == 0)
         {
+            var randomMcts = new Mcts(MctsIterations, _oldValueNetwork.Clone(), _oldPolicyNetwork.Clone());
             _agentCatalog.Add(CreateAgent(ExplorationConstant, randomMcts, null));
         }
 
@@ -192,11 +204,11 @@ public partial class Form1 : Form
         {
             if (agents.TeachingSessions < MaxTeachingSessions)
             {
-                _teacherQueue.Enqueue(agents);
+                _teacherQueue.Enqueue(agents.Clone());
             }
         }
 
-        _teacherAgent = _teacherQueue.Peek();
+        _teacherAgent = _teacherQueue.Dequeue()!.Clone();
 
         _yellowMcts = champions[0].ToMctsCloned(MctsIterations);
 
@@ -205,13 +217,13 @@ public partial class Form1 : Form
             i++;
             championToPlayAgainst--;
 
-            //_yellowMcts = champions[championToPlayAgainst].ToMctsCloned(MctsIterations);
-
             // 1 Evaluate the trained network
             textBox2.AddLine($" === Challenger {challengerAgent.LatestWinRate:f0}% " +
                 $"vs Champion {champions.Count - championToPlayAgainst} / {champions.Count} ===");
             var stopwatch2 = Stopwatch.StartNew();
+            
             _telemetryHistory.BeginAddingNewEntries();
+            
             Agent trainedAgent = CreateAgent(ExplorationConstant, trainedMcts, challengerAgent);
             (bool isImproved, bool isBetter, double currentGame1, double currentGame2) = await EvaluateAgentAlternate(
                 trainedAgent,
@@ -224,12 +236,6 @@ public partial class Form1 : Form
             stopwatch2.Stop();
             textBox2.AddLine($"Evaluation done in {stopwatch2.ElapsedMilliseconds} ms");
 
-            //if (isBetter && championToPlayAgainst > 0)
-            //{
-            //    AddToListBox($"Challenger better than Champion {champions.Count - championToPlayAgainst} / {champions.Count}");
-            //    continue;
-            //}
-
             if (isBetter)
             {
                 previousImprovementGame1 = 0;
@@ -240,62 +246,58 @@ public partial class Form1 : Form
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
                 challengerAgent.LatestWinRate = (currentGame1 + currentGame2) / 2;
 
-                //reset the teaching sessions on successfull teach
-                _teacherAgent.TeachingSessions = 0;
+                _teacherAgent!.TeachingSessions = 0;
                 _teacherAgent.LatestWinRate = _teacherAgent.LatestWinRate == 0
                     ? challengerAgent.LatestWinRate
                     : _teacherAgent.LatestWinRate;
 
                 Agent betterAgent = challengerAgent.Clone();
-
                 _teacherQueue.Enqueue(betterAgent);
                 totalTeachers++;
 
                 _agentCatalog.Add(betterAgent);
-
+                
                 _telemetryHistory.ClearAll();
 
                 champions = [.. _agentCatalog.Entries.Values];
 
-                textBox2.AddLine($"Better added as Teacher. Teacher total: {_teacherQueue.Count - 1}");
+                textBox2.AddLine($"Better added as Teacher. Teacher total: {_teacherQueue.Count }");
             }
             else if (isImproved)
             {
                 previousImprovementGame1 = currentGame1;
                 previousImprovementGame2 = currentGame2;
 
-                //reset the teaching sessions on successfull teach
-                _teacherAgent.TeachingSessions = 0;
+                _teacherAgent!.TeachingSessions = 0;
 
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
 
-                textBox2.AddLine($"Improved. Teacher total: {_teacherQueue.Count - 1}");
+                textBox2.AddLine($"Improved. Teacher total: {_teacherQueue.Count }");
             }
             else
             {
-                _teacherAgent.TeachingSessions++;
+                _teacherAgent!.TeachingSessions++;
 
-                textBox2.AddLine($"No improvement session {_teacherAgent.TeachingSessions}. Teacher total: {_teacherQueue.Count - 1}");
+                textBox2.AddLine($"No improvement session {_teacherAgent.TeachingSessions}. Teacher total: {_teacherQueue.Count}");
             }
 
-            // Load a new teacher if the current one has reached max teaching sessions
             if (_teacherAgent.TeachingSessions >= MaxTeachingSessions)
             {
-                Agent lastTeacher = _teacherQueue.Dequeue();
                 if (_teacherQueue.Count == 0)
                 {
-                    textBox2.AddLine($"Training DONE no new teachers after teacher {lastTeacher.Generation}");
+                    textBox2.AddLine($"Training DONE no new teachers after teacher {_teacherAgent?.Generation}");
                     break;
                 }
 
-                // if training didnt work reset and start again
                 previousImprovementGame1 = 0;
                 previousImprovementGame2 = 0;
                 _telemetryHistory.ClearAll();
                 challengerAgent = _teacherQueue.ToArray().Last().Clone();
 
-                _teacherAgent = _teacherQueue.Peek();
-                textBox2.AddLine($"New teacher {_teacherAgent.Generation} Teacher total: {_teacherQueue.Count - 1}");
+                _teacherAgent.Dispose();
+                _teacherAgent = _teacherQueue.Dequeue()!.Clone();
+                
+                textBox2.AddLine($"New teacher {_teacherAgent!.Generation} Teacher total: {_teacherQueue.Count}");
             }
 
             championToPlayAgainst = champions.Count;
@@ -303,6 +305,7 @@ public partial class Form1 : Form
             // 2 play a minimum amont of self play games to refresh the telemetry history
             var stopwatch = Stopwatch.StartNew();
             _telemetryHistory.BeginAddingNewEntries();
+
             await SelfPlayParallel(_teacherAgent, SelfPlayGames);
             stopwatch.Stop();
 
@@ -315,6 +318,8 @@ public partial class Form1 : Form
 
             // 3 Train a new red network
             var stopwatch3 = Stopwatch.StartNew();
+            
+            trainedMcts?.Dispose();
             trainedMcts = challengerAgent.ToMctsCloned(MctsIterations);
             _ = await TrainAsync(trainedMcts);
             stopwatch3.Stop();
@@ -325,7 +330,6 @@ public partial class Form1 : Form
 
     private static Agent CreateAgent(double explorationFactor, Mcts mcts, Agent? previousAgent)
     {
-        //Create an agent based on the victorious Red
         IStandardNetwork valueNetwork = mcts.ValueNetwork?.Clone()!;
         valueNetwork.ExplorationFactor = explorationFactor;
         IStandardNetwork policyNetwork = mcts.PolicyNetwork?.Clone()!;
@@ -410,12 +414,11 @@ public partial class Form1 : Form
         bool isFinalEvaluation,
         int vsGames)
     {
-        // Evaluate the trained network against the current agent
-
-        textBox2.AddLine(string.Empty);
-        textBox2.AddLine($"Playing Challenger {trainedAgent?.Generation} Vs Champ");
-
         var trainedMcts = trainedAgent.ToMcts(MctsIterations);
+
+        // Evaluate the trained network against the current agent
+        textBox2.AddLine(string.Empty);
+        textBox2.AddLine($"Playing Challenger {trainedAgent.Generation} Vs Champ");
 
         (_, _, _, _) = await VsPlayParallel(
             trainedMcts,
@@ -428,10 +431,9 @@ public partial class Form1 : Form
         double agent1Game1 = _redWithDrawPercent;
         double agent2Game1 = _yellowWithDrawPercent;
 
-        textBox2.AddLine($"Challenger {_redWithDrawPercent}% Champ {_yellowWithDrawPercent}%");
 
         // Now Evaluate the current agent against the trained network
-
+        textBox2.AddLine($"Challenger {_redWithDrawPercent}% Champ {_yellowWithDrawPercent}%");
         textBox2.AddLine($"Playing Champ Vs Challenger {trainedAgent?.Generation}");
 
         (_, _, _, _) = await VsPlayParallel(
@@ -447,12 +449,10 @@ public partial class Form1 : Form
 
         textBox2.AddLine($"Challenger {_yellowWithDrawPercent}% Champ {_redWithDrawPercent}%");
 
-        //Draw the chart
         DrawAverageChartLines(improvementGame1, improvementGame2, agent1Game1, agent2Game1, agent1Game2, agent2Game2);
 
-        // Check if the new agent better than the previous agent on the other side
         (bool isImproved, bool isBetter) = CheckVsAverageScore(
-            improvementGame1, improvementGame2, bestGame1, bestGame2, vsGames, agent1Game1, agent2Game1, agent1Game2, agent2Game2);
+            improvementGame1, improvementGame2, bestGame1, bestGame2, agent1Game1, agent2Game1, agent1Game2, agent2Game2);
 
         TrainingProgress progress = isBetter && isFinalEvaluation
             ? TrainingProgress.IsBetterSignificantly
@@ -506,7 +506,6 @@ public partial class Form1 : Form
         double improvementGame2,
         double bestGame1,
         double bestGame2,
-        int vsGames,
         double agent1Game1,
         double agent2Game1,
         double agent1Game2,
@@ -518,13 +517,13 @@ public partial class Form1 : Form
         double bestAvg = (bestGame1 + bestGame2) / 2 / 100;
 
         double marginOfError = 0;// ErrorConfidence * Math.Sqrt(agent1Avg * (1 - agent1Avg) / vsGames);
-        bool isImproved = improveAvg <= agent1Avg;
-        bool isBetter = agent2Avg + marginOfError <= agent1Avg
-            && bestAvg + marginOfError <= agent1Avg;
+        bool isImproved = improveAvg < agent1Avg;
+        bool isBetter = agent2Avg + marginOfError < agent1Avg
+            && bestAvg + marginOfError < agent1Avg;
 
-        textBox2.AddLine($"Improve: {improveAvg:f2} <= {agent1Avg:f2} = {isImproved} ");
-        textBox2.AddLine($"Better : {agent2Avg + marginOfError:f2} <= {agent1Avg:f2} " +
-            $"AND {bestAvg + marginOfError:f2} ({bestAvg:f2} + {marginOfError:f2})<= {agent1Avg:f2} = {isBetter}");
+        textBox2.AddLine($"Improve: {improveAvg:f2} < {agent1Avg:f2} = {isImproved} ");
+        textBox2.AddLine($"Better : {agent2Avg + marginOfError:f2} < {agent1Avg:f2} " +
+            $"AND {bestAvg + marginOfError:f2} ({bestAvg:f2} + {marginOfError:f2})< {agent1Avg:f2} = {isBetter}");
 
         return (isImproved, isBetter);
     }
@@ -596,8 +595,6 @@ public partial class Form1 : Form
             int index = gameIndex;
             globalStats[index] = (0, 0, 0, 0);
 
-            // Calculate how many games this thread should play
-            // First 'remainingGames' threads get one extra game
             int gamesToPlay = gamesPerThread + (index < remainder ? 1 : 0);
 
             tasks.Add(Task.Run(async () =>
@@ -713,7 +710,6 @@ public partial class Form1 : Form
         _ = Invoke(() => textBox3.Text = string.Empty);
 
         TelemetryHistory telemetryHistory = _telemetryHistory;
-        var random = new Random();
         int minPolicRuns = int.MaxValue;
         double minPolicyError = double.MaxValue;
 
@@ -722,12 +718,6 @@ public partial class Form1 : Form
 
         double previousValueError = double.MaxValue;
         double previousPolicyError = double.MaxValue;
-        var valueErrorHistory = new Queue<double>();
-        var policyErrorHistory = new Queue<double>();
-        double? previousMovingAverageValueError = double.MaxValue;
-        double? previousMovingAveragePolicyError = double.MaxValue;
-        int consecutiveIncreasesValueError = 0;
-        int consecutiveIncreasesPolicyError = 0;
         double valueError = 0;
         double policyError = 0;
         double clonedAtValueError = 0;
@@ -739,114 +729,110 @@ public partial class Form1 : Form
         IStandardNetwork? tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
         tempPolicyNetwork.Trained = true;
 
-        int movingAveragePolicy = MovingAverageSize;
+        int valuePatienceCounter = 0;
+        int policyPatienceCounter = 0;
+        double bestValueValidation = double.MaxValue;
+        double bestPolicyValidation = double.MaxValue;
 
-        int steps = TrainingSteps;// (int)Math.Min(100, 50 + 40 * (_telemetryHistory.Count / (double)TelemetryHistory.MaxBufferSize));
-
-        // moving average for value is larger because it fluctuates more
-        int movingAverageValue = movingAveragePolicy;
-
+        int steps = TrainingSteps;
         int i = -1;
         string vStop = string.Empty;
         string pStop = string.Empty;
 
-        (double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = telemetryHistory
-            //.GetTrainingDataRandom(_telemetryHistory.NewEntries);
+        (double[][] fullTrainingData, double[][] fullPolicyExpectedData, double[][] fullValueExpectedData) = telemetryHistory
             .GetTrainingDataRandomAveragedNewFirst(_telemetryHistory.Count);
+
+        // Trin on 80% and validate with 20%
+        int trainCount = (int)(fullTrainingData.Length * 0.8);
+        double[][] trainingData = [.. fullTrainingData.Take(trainCount)];
+        double[][] policyExpectedData = [.. fullPolicyExpectedData.Take(trainCount)];
+        double[][] valueExpectedData = [.. fullValueExpectedData.Take(trainCount)];
+
+        double[][] validationData = [.. fullTrainingData.Skip(trainCount)];
+        double[][] validationPolicyData = [.. fullPolicyExpectedData.Skip(trainCount)];
+        double[][] validationValueData = [.. fullValueExpectedData.Skip(trainCount)];
+
+        double valueValidationError = double.MaxValue;
+        double policyValidationError = double.MaxValue;
+        int clonedAtValueStep = 0;
+        int clonedAtPolicyStep = 0;
 
         while (i < steps)
         {
             i++;
 
-            // Get all new entries plus a little bit of the old entries or a random sample of the entire history
-            //(double[][] trainingData, double[][] policyExpectedData, double[][] valueExpectedData) = Random.Shared.NextBoolean()
-            //    ? telemetryHistory.GetTrainingDataRandom(_telemetryHistory.NewEntries)
-            //    : telemetryHistory.GetTrainingDataNewFirst(_telemetryHistory.NewEntries);
-
             if (!valueStopEarly)
             {
                 valueError = valueTrainer.Train(trainingData, valueExpectedData);
+                valueValidationError = ComputeValidationError(mcts.ValueNetwork, validationData, validationValueData, isValue: true);
             }
 
             if (!policyStopEarly)
             {
                 policyError = policyTrainer.Train(trainingData, policyExpectedData);
+                policyValidationError = ComputeValidationError(mcts.PolicyNetwork, validationData, validationPolicyData, isValue: false);
             }
 
             string valueArrow = valueError > previousValueError ? "🡹" : "🡻";
             string policyArrow = policyError > previousPolicyError ? "🡹" : "🡻";
+            string valValueArrow = valueValidationError > bestValueValidation ? "🡹" : "🡻";
+            string valPolicyArrow = policyValidationError > bestPolicyValidation ? "🡹" : "🡻";
 
             Invoke(() =>
             {
-                textBox3.AddLine($"Step {i}\t V:Error {Math.Round(valueError, 8):F8} {valueArrow} \t P:Error {Math.Round(policyError, 8):F8} {policyArrow}");
+                textBox3.AddLine($"Step {i}\t V: {Math.Round(valueValidationError, 8):F8} {valValueArrow} P:{valuePatienceCounter}/{Patience} \t " +
+                    $"P: {Math.Round(policyValidationError, 8):F8} {valPolicyArrow} P:{policyPatienceCounter}/{Patience}");
             });
 
-            if (valueErrorHistory.Count == movingAverageValue)
+            // Early stop on Value
+            if (valueValidationError <= bestValueValidation)
             {
-                _ = valueErrorHistory.Dequeue();
-            }
-
-            valueErrorHistory.Enqueue(valueError);
-
-            if (policyErrorHistory.Count == movingAveragePolicy)
-            {
-                _ = policyErrorHistory.Dequeue();
-            }
-
-            policyErrorHistory.Enqueue(policyError);
-
-            // only start checking for early stoping after a few steps to allow some initial training
-            if (i > movingAverageValue)
-            {
-                double movingAverageValueError = valueErrorHistory.Average();
-
-                if (movingAverageValueError >= previousMovingAverageValueError)
-                {
-                    consecutiveIncreasesValueError++;
-                }
-                else if (!valueStopEarly)
+                bestValueValidation = valueValidationError;
+                valuePatienceCounter = 0;
+                if (!valueStopEarly)
                 {
                     tempValueNetwork = mcts.ValueNetwork!.Clone();
-                    clonedAtValueError = valueError;
-                    consecutiveIncreasesValueError = 0;
+                    clonedAtValueError = valueValidationError;
+                    clonedAtValueStep = i;
                 }
-
-                previousMovingAverageValueError = movingAverageValueError;
+            }
+            else if (!valueStopEarly)
+            {
+                valuePatienceCounter++;
             }
 
-            if (i > movingAveragePolicy)
+            // Early stop on Policy
+            if (policyValidationError <= bestPolicyValidation)
             {
-                double movingAveragePolicyError = policyErrorHistory.Average();
-
-                if (movingAveragePolicyError >= previousMovingAveragePolicyError)
-                {
-                    consecutiveIncreasesPolicyError++;
-                }
-                else if (!policyStopEarly)
+                bestPolicyValidation = policyValidationError;
+                policyPatienceCounter = 0;
+                if (!policyStopEarly)
                 {
                     tempPolicyNetwork = mcts.PolicyNetwork!.Clone();
-                    clonedAtPolicyError = policyError;
-                    consecutiveIncreasesPolicyError = 0;
+                    clonedAtPolicyError = policyValidationError;
+                    clonedAtPolicyStep = i;
                 }
-
-                previousMovingAveragePolicyError = movingAveragePolicyError;
+            }
+            else if (!policyStopEarly)
+            {
+                policyPatienceCounter++;
             }
 
-            if (!valueStopEarly && consecutiveIncreasesValueError >= ConsecutiveIncreaseLimit)
+            if (!valueStopEarly && valuePatienceCounter >= Patience)
             {
                 Invoke(() =>
                 {
-                    vStop = $"V peeked => steps: {i} boardstates: {MiniBatchNetworkTrainer.BatchSize * i}";
+                    vStop = $"V cloned at step {clonedAtValueStep}/{i}. Best val error: {Math.Round(bestValueValidation, 8):F8}";
                     textBox3.AddLine(vStop);
                 });
                 valueStopEarly = true;
             }
 
-            if (!policyStopEarly && consecutiveIncreasesPolicyError >= ConsecutiveIncreaseLimit)
+            if (!policyStopEarly && policyPatienceCounter >= Patience)
             {
                 Invoke(() =>
                 {
-                    pStop = $"P peeked => steps: {i} boardstates: {MiniBatchNetworkTrainer.BatchSize * i}";
+                    pStop = $"P stop at step {clonedAtPolicyStep}/{i}. Best val error: {Math.Round(bestPolicyValidation, 8):F8}";
                     textBox3.AddLine(pStop);
                 });
                 policyStopEarly = true;
@@ -854,6 +840,10 @@ public partial class Form1 : Form
 
             if (valueStopEarly && policyStopEarly)
             {
+                Invoke(() =>
+                {
+                    textBox3.AddLine($"Both networks stopped early at step {i}");
+                });
                 break;
             }
 
@@ -865,21 +855,49 @@ public partial class Form1 : Form
         mcts.ValueNetwork = tempValueNetwork;
 
         string y = $"Current agent is {_teacherAgent?.Id ?? "None"} generation: {_teacherAgent?.Generation ?? 0}";
-        string clonedErrors = $"Cloned error at V:{Math.Round(clonedAtValueError, 8):F8} P:{Math.Round(clonedAtPolicyError, 8):F8}";
+        string clonedErrors = $"Best val errors - V:{Math.Round(clonedAtValueError, 8):F8} P:{Math.Round(clonedAtPolicyError, 8):F8}";
         Invoke(() =>
         {
             textBox3.AddLine(string.Empty);
             textBox3.AddLine(clonedErrors);
             textBox3.AddLine(vStop);
             textBox3.AddLine(pStop);
-            textBox3.AddLine($"Max steps {steps}");
-            textBox3.AddLine($"Training set = {trainingData.Length} of {_telemetryHistory.Count}");
-            textBox3.AddLine($"Moving Average size = {movingAverageValue}");
-            textBox3.AddLine($"Total boarstates trained {MiniBatchNetworkTrainer.BatchSize * i}");
+            textBox3.AddLine($"Max steps {steps}, completed {i + 1} steps");
+            textBox3.AddLine($"Training set = {trainingData.Length}, Validation set = {validationData.Length}");
+            textBox3.AddLine($"Patience = {Patience}");
+            textBox3.AddLine($"Total boardstates trained {MiniBatchNetworkTrainer.BatchSize * (i + 1)}");
             textBox3.AddLine(y);
         });
 
         return Task.FromResult<(int, double)>((minPolicRuns, minPolicyError));
+    }
+
+    private static double ComputeValidationError(IStandardNetwork network, double[][] inputs, double[][] targets, bool isValue)
+    {
+        double totalError = 0;
+        int count = inputs.Length;
+
+        for (int i = 0; i < count; i++)
+        {
+            double[] output = network.Calculate(inputs[i]);
+
+            if (isValue)
+            {
+                double diff = output[0] - targets[i][0];
+                totalError += 0.5 * diff * diff;
+            }
+            else
+            {
+                for (int j = 0; j < output.Length; j++)
+                {
+                    double p = Math.Max(targets[i][j], 1e-11);
+                    double q = Math.Max(output[j], 1e-11);
+                    totalError += -p * Math.Log(q);
+                }
+            }
+        }
+
+        return totalError / count;
     }
 
     private void UpdateGlobalStats(
@@ -996,8 +1014,6 @@ public partial class Form1 : Form
             int index = gameIndex;
             globalStats[index] = (0, 0, 0, 0);
 
-            // Calculate how many games this thread should play
-            // First 'remainingGames' threads get one extra game
             int gamesToPlay = gamesPerThread + (index < remainder ? 1 : 0);
 
             tasks.Add(Task.Run(async () =>

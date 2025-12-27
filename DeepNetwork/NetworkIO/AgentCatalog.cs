@@ -17,7 +17,7 @@ public class AgentCatalog(int catalogSize)
 
         _ = agent?.Id ?? throw new ArgumentNullException(nameof(agent));
 
-        DirectoryInfo directoryInfo = new DirectoryInfo(CatalogFolder); 
+        DirectoryInfo directoryInfo = new DirectoryInfo(CatalogFolder);
 
         agent.ValuePath = Path.Combine(directoryInfo.FullName, $"{agent.Id}\\{agent.Id}_values.json");
         agent.PolicyPath = Path.Combine(directoryInfo.FullName, $"{agent.Id}\\{agent.Id}_policy.json");
@@ -92,9 +92,17 @@ public class AgentCatalog(int catalogSize)
     {
         if (agentIds.Count >= catalogSize)
         {
-            agentIds.TryDequeue(out string? oldestAgentId);
-            if (oldestAgentId is not null)
+            if (agentIds.TryDequeue(out string? oldestAgentId) && oldestAgentId is not null)
             {
+                if (entries.TryGetValue(oldestAgentId, out var oldAgent))
+                {
+                    try
+                    {
+                        oldAgent.Dispose();
+                    }
+                    catch { }
+                }
+
                 entries.Remove(oldestAgentId);
             }
         }

@@ -623,4 +623,9 @@ public class FlatDumbNetwork : IStandardNetwork
         error /= setCount;
         return (Gradients, GradientBiases, error);
     }
+
+    public void Dispose()
+    {
+        // currently not being used so didnt implement 
+    }
 }

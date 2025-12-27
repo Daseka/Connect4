@@ -12,13 +12,14 @@ namespace DeepNetwork;
 
 public class MiniBatchMatrixNetwork : IStandardNetwork
 {
-    private const double LearningRate = 0.0008;
+    private const double LearningRate = 0.001;
     private const double NearNullValue = 1e-11d;
 
     private readonly IActivationFunction[] _activations;
 
     // Adam optimizer state
     private readonly Matrix<double>[] _adamM;
+
     private readonly Vector<double>[] _adamMBias;
     private readonly Matrix<double>[] _adamV;
     private readonly Vector<double>[] _adamVBias;
@@ -31,11 +32,13 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     // Matrix/Vector representations for batch training
     private Vector<double>[] _biases = [];
+
     private int[] _biasOffsets = [];
     private double[] _flatBiases = [];
 
     // Flat arrays for ultra-fast foward pass
     private double[] _flatWeights = [];
+
     private int[] _layerOffsets = [];
     private double[] _values = [];
     private int[] _weightOffsets = [];
@@ -49,6 +52,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
     public double LastError { get; set; }
     public bool Softmax { get; }
     public bool Trained { get; set; }
+
+    public bool _disposed = false;
 
     static MiniBatchMatrixNetwork()
     {
@@ -109,7 +114,12 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 //_activations[i] = new TanhActivationFunction();
                 //_activations[i] = new SigmoidActivationFunction();
             }
-       }
+        }
+    }
+
+    public void ResetAdamTimer()
+    {
+        _adamT = 0;
     }
 
     public static IStandardNetwork? CreateFromFile(string fileName)
@@ -654,6 +664,96 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             var mHatB = _adamMBias[layer] / b1Corr;
             var vHatB = _adamVBias[layer] / b2Corr;
             _biases[layer] -= mHatB.PointwiseDivide(vHatB.PointwiseSqrt() + epsilon) * learningRate;
+        }
+    }
+
+    /// <summary>
+    /// Trying to free up memory faster
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        try
+        {
+            _cachedValues.Clear();
+            while (_cacheKeys.TryDequeue(out _)) { }
+
+            if (_weights != null)
+            {
+                for (int i = 0; i < _weights.Length; i++)
+                {
+                    _weights[i] = null!;
+                }
+            }
+
+            if (_biases != null)
+            {
+                for (int i = 0; i < _biases.Length; i++)
+                {
+                    _biases[i] = null!;
+                }
+            }
+
+            if (Gradients != null)
+            {
+                for (int i = 0; i < Gradients.Length; i++)
+                {
+                    Gradients[i] = null!;
+                }
+            }
+
+            if (GradientBiases != null)
+            {
+                for (int i = 0; i < GradientBiases.Length; i++)
+                {
+                    GradientBiases[i] = null!;
+                }
+            }
+
+            if (_adamM != null)
+            {
+                for (int i = 0; i < _adamM.Length; i++)
+                {
+                    _adamM[i] = null!;
+                }
+            }
+
+            if (_adamV != null)
+            {
+                for (int i = 0; i < _adamV.Length; i++)
+                {
+                    _adamV[i] = null!;
+                }
+            }
+
+            if (_adamMBias != null)
+            {
+                for (int i = 0; i < _adamMBias.Length; i++)
+                {
+                    _adamMBias[i] = null!;
+                }
+            }
+
+            if (_adamVBias != null)
+            {
+                for (int i = 0; i < _adamVBias.Length; i++)
+                {
+                    _adamVBias[i] = null!;
+                }
+            }
+
+            _flatWeights = [];
+            _flatBiases = [];
+            _values = [];
+            _layerOffsets = [];
+            _weightOffsets = [];
+            _biasOffsets = [];
+        }
+        finally
+        {
+            _disposed = true;
+            GC.SuppressFinalize(this);
         }
     }
 }

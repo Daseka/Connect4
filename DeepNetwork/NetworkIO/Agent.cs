@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 
 namespace DeepNetwork.NetworkIO;
 
-public class Agent
+public class Agent : IDisposable
 {
     public string? Created { get; set; }
     public double ExplorationFactor { get; set; } = 1.0;
@@ -41,5 +41,31 @@ public class Agent
         };
 
         return clone;
+    }
+
+    private bool _disposed = false;
+
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            PolicyNetwork?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            ValueNetwork?.Dispose();
+        }
+        catch { }
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }

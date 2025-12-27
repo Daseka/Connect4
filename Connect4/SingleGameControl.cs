@@ -205,7 +205,7 @@ namespace Connect4
             string startMessage = _selectedRemoteGameModes == AiVsRemote
                 ? "Starting game: AI (Red) vs Remote \n Making first move..."
                 : "Starting game: Remote vs AI (Yellow)\n Listening for move..";
-			_messageConsole?.AddLine($"{startMessage}");
+            _messageConsole?.AddLine($"{startMessage}");
 
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
@@ -214,7 +214,7 @@ namespace Connect4
                 {
                     int move = await PerformAiMoveOnly(_redMcts);
                     await communicator.SendAsync($"{move}");
-					_messageConsole?.AddLine($"Sening move:\t {move}");
+                    _messageConsole?.AddLine($"Sening move:\t {move}");
 
                     int val = await GetRemoteResponse(communicator);
                     if (val == -1)
@@ -222,7 +222,7 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-					_messageConsole?.AddLine($"Recieved move:\t {val}");
+                    _messageConsole?.AddLine($"Recieved move:\t {val}");
                 }
                 else
                 {
@@ -232,11 +232,11 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-					_messageConsole?.AddLine($"Recieved move:\t {val}");
+                    _messageConsole?.AddLine($"Recieved move:\t {val}");
 
                     int move = await PerformAiMoveOnly(_yellowMcts);
                     await communicator.SendAsync($"{move}");
-					_messageConsole?.AddLine($"Sending move:\t {move}");
+                    _messageConsole?.AddLine($"Sending move:\t {move}");
                 }
             }
 
@@ -487,6 +487,9 @@ namespace Connect4
                 _selectedAgent = radioButton.Tag as Agent;
                 if (_selectedAgent != null)
                 {
+                    try { _redMcts.PolicyNetwork?.Dispose(); } catch { }
+                    try { _redMcts.ValueNetwork?.Dispose(); } catch { }
+
                     _redMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
                     _redMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
                 }
@@ -512,7 +515,7 @@ namespace Connect4
                 return;
             }
 
-			_messageConsole?.AddLine($"Connecting to {ipInfo[0]}:{port}");
+            _messageConsole?.AddLine($"Connecting to {ipInfo[0]}:{port}");
 
             _communicator?.Dispose();
             _communicator = new Communicator(IncomingPort, ipInfo[0], port);
@@ -598,6 +601,9 @@ namespace Connect4
                 _selectedAgent = radioButton.Tag as Agent;
                 if (_selectedAgent != null)
                 {
+                    try { _yellowMcts.PolicyNetwork?.Dispose(); } catch { }
+                    try { _yellowMcts.ValueNetwork?.Dispose(); } catch { }
+
                     _yellowMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
                     _yellowMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
                 }

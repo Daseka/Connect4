@@ -19,7 +19,7 @@ namespace Connect4.GameParts
         private readonly Brush _textBrush = new SolidBrush(Color.White);
         private readonly Font _titleFont = new("Arial", 12, FontStyle.Bold);
         private readonly Font _axisFont = new("Arial", 9);
-        
+
         public string Title { get; set; } = "Chart";
         public string XAxisLabel { get; set; } = "X";
         public string YAxisLabel { get; set; } = "Y";
@@ -36,7 +36,7 @@ namespace Connect4.GameParts
             BackColor = Color.Black;
         }
 
-        public void AddDataPoint(double redValue, double yellowValue, double drawValue )
+        public void AddDataPoint(double redValue, double yellowValue, double drawValue)
         {
             _redPoints.Add(redValue);
             _yellowPoints.Add(yellowValue);
@@ -136,93 +136,107 @@ namespace Connect4.GameParts
                     g.DrawString(label, _axisFont, _textBrush, x + (barWidth - labelSize.Width) / 2, chartArea.Bottom + 5);
                 }
             }
-            // Draw data points and lines
+            // Draw data points and lines (only last 100 points)
             if (_redPoints.Count > 0)
             {
-                Point[] redPoints = new Point[_redPoints.Count];
-                Point[] yellowPoints = new Point[_yellowPoints.Count];
-                Point[] drawPoints = new Point[_drawPoints.Count];
-                for (int i = 0; i < _redPoints.Count; i++)
-                {
-                    double x;
-                    if (_redPoints.Count == 1)
-                    {
-                        x = chartArea.Left + chartArea.Width / 2.0;
-                    }
-                    else
-                    {
-                        x = chartArea.Left + (double)i / (_redPoints.Count - 1) * chartArea.Width;
-                    }
-                    
-                    double redY;
-                    double yellowY;
-                    double drawY;
-                    if (YMax == YMin)
-                    {
-                        // If YMax == YMin, center the point vertically
-                        redY = chartArea.Top + chartArea.Height / 2.0;
-                        yellowY = chartArea.Top + chartArea.Height / 2.0;
-                        drawY = chartArea.Top + chartArea.Height / 2.0;
-                    }
-                    else
-                    {
-                        redY = chartArea.Bottom - (_redPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
-                        yellowY = chartArea.Bottom - (_yellowPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
-                        drawY = chartArea.Bottom - (_drawPoints[i] - YMin) / (YMax - YMin) * chartArea.Height;
-                    }
-                    
-                    redPoints[i] = new Point((int)x, (int)redY);
-                    yellowPoints[i] = new Point((int)x, (int)yellowY);
-                    drawPoints[i] = new Point((int)x, (int)drawY);
-                }
-                
-                // Draw lines between points (only if we have more than 1 point)
-                if (redPoints.Length > 1)
-                {
-                    g.DrawLines(_redPen, redPoints);
-                    g.DrawLines(_yellowPen, yellowPoints);
-                    g.DrawLines(_drawPen, drawPoints);
-                }
-                
-                for (int i = 0; i < redPoints.Length; i++)
-                {
-                    Color pointColor = PositionsRedNetworkBetter[i];
-                    g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);
-                }
-            }
-            
-            // Draw X-axis labels
-            if (_redPoints.Count > 0)
-            {
-                int maxLabels = Math.Min(10, _redPoints.Count);
-                for (int i = 0; i < maxLabels; i++)
-                {
-                    int dataIndex = maxLabels == 1 
-                        ? 0 
-                        : i * (_redPoints.Count - 1) / (maxLabels - 1);
+                int total = _redPoints.Count;
+                int startIndex = Math.Max(0, total - 100);
+                int displayCount = total - startIndex;
 
-                    if (dataIndex >= 0 && dataIndex < _redPoints.Count)
+                if (displayCount > 0)
+                {
+                    Point[] redPoints = new Point[displayCount];
+                    Point[] yellowPoints = new Point[displayCount];
+                    Point[] drawPoints = new Point[displayCount];
+
+                    for (int i = 0; i < displayCount; i++)
                     {
+                        int dataIndex = startIndex + i;
+
                         double x;
-                        if (_redPoints.Count == 1)
+                        if (displayCount == 1)
                         {
-                            // Single data point - center it
                             x = chartArea.Left + chartArea.Width / 2.0;
                         }
                         else
                         {
-                            // Multiple data points - distribute evenly
-                            x = chartArea.Left + (double)dataIndex / (_redPoints.Count - 1) * chartArea.Width;
+                            x = chartArea.Left + (double)i / (displayCount - 1) * chartArea.Width;
                         }
-                        
-                        string label = (dataIndex + 1).ToString();
-                        SizeF labelSize = g.MeasureString(label, _axisFont);
-                        g.DrawString(label, _axisFont, _textBrush, (float)x - labelSize.Width / 2, chartArea.Bottom + 5);
+
+                        double redY;
+                        double yellowY;
+                        double drawY;
+                        if (YMax == YMin)
+                        {
+                            redY = chartArea.Top + chartArea.Height / 2.0;
+                            yellowY = chartArea.Top + chartArea.Height / 2.0;
+                            drawY = chartArea.Top + chartArea.Height / 2.0;
+                        }
+                        else
+                        {
+                            redY = chartArea.Bottom - (_redPoints[dataIndex] - YMin) / (YMax - YMin) * chartArea.Height;
+                            yellowY = chartArea.Bottom - (_yellowPoints[dataIndex] - YMin) / (YMax - YMin) * chartArea.Height;
+                            drawY = chartArea.Bottom - (_drawPoints[dataIndex] - YMin) / (YMax - YMin) * chartArea.Height;
+                        }
+
+                        redPoints[i] = new Point((int)x, (int)redY);
+                        yellowPoints[i] = new Point((int)x, (int)yellowY);
+                        drawPoints[i] = new Point((int)x, (int)drawY);
+                    }
+
+                    // Draw lines between points (only if we have more than 1 point)
+                    if (redPoints.Length > 1)
+                    {
+                        g.DrawLines(_redPen, redPoints);
+                        g.DrawLines(_yellowPen, yellowPoints);
+                        g.DrawLines(_drawPen, drawPoints);
+                    }
+
+                    for (int i = 0; i < redPoints.Length; i++)
+                    {
+                        int dataIndex = startIndex + i;
+                        Color pointColor = (dataIndex < PositionsRedNetworkBetter.Count) ? PositionsRedNetworkBetter[dataIndex] : Color.White;
+                        g.FillEllipse(new SolidBrush(pointColor), redPoints[i].X - 3, redPoints[i].Y - 3, 6, 6);
+                    }
+                }
+            }
+
+            // Draw X-axis labels for the displayed range
+            if (_redPoints.Count > 0)
+            {
+                int total = _redPoints.Count;
+                int startIndex = Math.Max(0, total - 100);
+                int displayCount = total - startIndex;
+
+                if (displayCount > 0)
+                {
+                    int maxLabels = Math.Min(10, displayCount);
+                    for (int i = 0; i < maxLabels; i++)
+                    {
+                        int relativeIndex = (maxLabels == 1) ? 0 : i * (displayCount - 1) / (maxLabels - 1);
+                        int dataIndex = startIndex + relativeIndex;
+
+                        if (dataIndex >= 0 && dataIndex < total)
+                        {
+                            double x;
+                            if (displayCount == 1)
+                            {
+                                x = chartArea.Left + chartArea.Width / 2.0;
+                            }
+                            else
+                            {
+                                x = chartArea.Left + (double)relativeIndex / (displayCount - 1) * chartArea.Width;
+                            }
+
+                            string label = (dataIndex + 1).ToString();
+                            SizeF labelSize = g.MeasureString(label, _axisFont);
+                            g.DrawString(label, _axisFont, _textBrush, (float)x - labelSize.Width / 2, chartArea.Bottom + 5);
+                        }
                     }
                 }
             }
         }
-        
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)

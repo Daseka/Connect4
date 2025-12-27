@@ -21,7 +21,7 @@ public partial class Form1 : Form
     //private readonly int[] policyArray = [127, 256, 128, 64, 64, 64, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
     private CancellationTokenSource _coliseimCancelationSource = new();
-    private int _gamesPlayed = 0;
+    //private int _gamesPlayed = 0;
     private bool _isBattleArenaRunning = false;
     private bool _isBattleColiseumRunning = false;
     private bool _isParallelSelfPlayRunning;

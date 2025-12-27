@@ -8,13 +8,14 @@ public class Mcts(
     int maxIterations,
     IStandardNetwork? valueNetwork = null,
     IStandardNetwork? policyNetwork = null,
-    Random? random = null)
+    Random? random = null): IDisposable
 {
     private const int MaxColumnCount = 7;
     private const double MinimumPolicyValue = 0.001;
     private readonly Random _random = random ?? new();
     private readonly TelemetryHistory _telemetryHistory = new();
     private Node? _rootNode;
+    private bool _disposed = false;
 
     public int MaxIterations { get; set; } = maxIterations;
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
@@ -88,6 +89,35 @@ public class Mcts(
     public TelemetryHistory GetTelemetryHistory()
     {
         return _telemetryHistory;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            PolicyNetwork?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            ValueNetwork?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            _telemetryHistory?.ClearAll();
+        }
+        catch { }
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
     public void SetWinnerTelemetryHistory(Winner winner)
@@ -246,7 +276,6 @@ public class Mcts(
         if (node.IsLeaf())
         {
             return Expand(node, random);
-            //Expand(node, random);
         }
 
         Node? bestChild = node.GetBestChild(policyNetwork, explorationFactor, random, isDeterministic);

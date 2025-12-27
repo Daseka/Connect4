@@ -13,6 +13,7 @@ public class MiniBatchNetworkTrainer : INetworkTrainer
             throw new ArgumentException($"Network must be of type MiniBatchMatrixNetwork not {network.GetType().Name}", nameof(network));
         }
         _network = miniBatchNetwork;
+        _network.ResetAdamTimer();
     }
     
     public double Train(double[][] trainingInputs, double[][] trainingOutputs)
