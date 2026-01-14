@@ -168,7 +168,7 @@ namespace Connect4
             PictureBox pictureBox)
         {
             int winner = connect4Game.PlacePieceClick(clickEvent, pictureBox);
-            pictureBox.Invoke(pictureBox.Refresh);
+            pictureBox.BeginInvoke(pictureBox.Refresh);
 
             return winner;
         }
@@ -264,7 +264,7 @@ namespace Connect4
         {
             mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
             connect4Game.ResetGame();
-            pictureBox.Invoke(pictureBox.Refresh);
+            pictureBox.BeginInvoke(pictureBox.Refresh);
             moveHistory.Clear();
 
             DisplayBoardStateHistory();
@@ -293,7 +293,7 @@ namespace Connect4
             {
                 var radioButton = new RadioButton
                 {
-                    Text = $"{agent.Id} (Gen: {agent.Generation})",
+                    Text = $"{agent.Id} (Gen: {agent.Generation} {agent.LatestWinRate:F2}%)",
                     Location = new Point(10, y),
                     AutoSize = true,
                     Tag = agent,
@@ -402,7 +402,7 @@ namespace Connect4
         {
             int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
             _ = _game.PlacePieceColumn(aiMove);
-            _pictureBox.Refresh();
+            _pictureBox.BeginInvoke(() => _pictureBox.Refresh());
 
             UpdateBoardStateHistory();
 
@@ -424,7 +424,7 @@ namespace Connect4
             int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
 
             _ = _game.PlacePieceColumn(aiMove);
-            _pictureBox.Refresh();
+            _pictureBox.BeginInvoke(() => _pictureBox.Refresh());
 
             UpdateBoardStateHistory();
 
@@ -549,7 +549,7 @@ namespace Connect4
                 Invoke(() =>
                 {
                     _ = _game.PlacePieceColumn(aiMove);
-                    _pictureBox.Refresh();
+                    _pictureBox.BeginInvoke(_pictureBox.Refresh);
                 });
 
                 UpdateBoardStateHistory();
@@ -578,7 +578,7 @@ namespace Connect4
                 string prevState = _moveHistory.Pop();
                 _game.SetState(prevState);
                 _game.CurrentPlayer = _game.CurrentPlayer == 1 ? 2 : 1;
-                _pictureBox.Refresh();
+                _pictureBox.BeginInvoke(_pictureBox.Refresh);
             }
         }
 

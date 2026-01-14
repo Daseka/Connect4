@@ -72,8 +72,13 @@ public class AgentCatalog(int catalogSize)
 
         foreach (Agent agent in Entries.Values)
         {
-            _ = agent.ValuePath ?? throw new InvalidOperationException($"Agent {agent.Id} does not have a value path.");
-            _ = agent.PolicyPath ?? throw new InvalidOperationException($"Agent {agent.Id} does not have a policy path.");
+            _ = agent.ValuePath ?? throw new InvalidOperationException($"Agent {agent.Id} does not exist.");
+            _ = agent.PolicyPath ?? throw new InvalidOperationException($"Agent {agent.Id} does not exist.");
+            
+            if (File.Exists(agent.ValuePath) && File.Exists(agent.PolicyPath))
+            {
+                continue;
+            }
 
             Directory.CreateDirectory(Path.GetDirectoryName(agent.ValuePath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(agent.PolicyPath)!);

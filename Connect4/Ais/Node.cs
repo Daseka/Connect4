@@ -103,10 +103,10 @@ public class Node
 
     public Node? GetMostValuableChild(int movesPlayed, bool isDeterministic)
     {
-        int index = SelectMoveFromVisits([..Children.Select(c => (int)c.Visits)], movesPlayed, isDeterministic);
+        int index = SelectMoveFromVisits([.. Children.Select(c => (int)c.Visits)], movesPlayed, isDeterministic);
 
-        return index < 0 || index >= Children.Count 
-            ? null 
+        return index < 0 || index >= Children.Count
+            ? null
             : Children[index];
     }
 
@@ -115,28 +115,27 @@ public class Node
     /// </summary>
     private int SelectMoveFromVisits(int[] visitCounts, int movesPlayed, bool isDeterministic)
     {
-        double temperature = movesPlayed < MovesThreshold ? 2 : 0;
-        
-        if (temperature == 0 || isDeterministic)
+        int mostVisited = 0;
+        int maxVisits = 0;
+        int? winningChild = null;
+        for (int i = 0; i < visitCounts.Length; i++)
         {
-            int mostVisited = 0;
-            int maxVisits= 0;
-            int? winningChild = null;
-            for (int i = 0; i < visitCounts.Length; i++)
+            if (visitCounts[i] > maxVisits)
             {
-                if (visitCounts[i] > maxVisits)
-                {
-                    maxVisits = visitCounts[i];
-                    mostVisited = i;
-                }
-
-                if (Children[i].GameBoard.HasWon((int)Children[i].PLayerWhoMadeMove))
-                {
-                    winningChild = i;
-                }
+                maxVisits = visitCounts[i];
+                mostVisited = i;
             }
 
-            //prioratize winning child over best child
+            if (Children[i].GameBoard.HasWon((int)Children[i].PLayerWhoMadeMove))
+            {
+                winningChild = i;
+            }
+        }
+
+        // select wining move always if available even in non deterministic mode
+        double temperature = movesPlayed < MovesThreshold ? 2 : 0;
+        if (temperature == 0 || isDeterministic || winningChild is not null)
+        {
             return winningChild ?? mostVisited;
         }
 
@@ -146,7 +145,7 @@ public class Node
         {
             if (visitCounts[i] > 0)
             {
-                weights[i] = Math.Pow(visitCounts[i], 1/ temperature);
+                weights[i] = Math.Pow(visitCounts[i], 1 / temperature);
                 sumWeights += weights[i];
             }
         }
@@ -199,7 +198,7 @@ public class Node
     }
 
     private double[] GetProbabilityCached(
-        IStandardNetwork policyNetwork, 
+        IStandardNetwork policyNetwork,
         GameBoard gameBoard)
     {
         if (_cachedProbability is not null)

@@ -2,7 +2,7 @@
 
 public class MiniBatchNetworkTrainer : INetworkTrainer
 {
-    public const int BatchSize = 1024;
+    public const int BatchSize = 1440;
 
     private readonly MiniBatchMatrixNetwork _network;
     
@@ -16,14 +16,17 @@ public class MiniBatchNetworkTrainer : INetworkTrainer
         _network.ResetAdamTimer();
     }
     
-    public double Train(double[][] trainingInputs, double[][] trainingOutputs)
+    public double Train(double[][] trainingInputs, double[][] trainingOutputs, double? learnRate)
     {
         if (trainingInputs.Length == 0)
         {
             return 0;     
         }
 
-        double error = _network.TrainMiniBatch(trainingInputs, trainingOutputs, BatchSize);
+        double error = learnRate.HasValue
+            ? _network.TrainMiniBatch(trainingInputs, trainingOutputs, BatchSize, learnRate.Value)
+            : _network.TrainMiniBatch(trainingInputs, trainingOutputs, BatchSize);
+
         _network.Trained = true;
         _network.ClearCache();
 

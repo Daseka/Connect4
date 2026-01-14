@@ -8,7 +8,7 @@ public class Mcts(
     int maxIterations,
     IStandardNetwork? valueNetwork = null,
     IStandardNetwork? policyNetwork = null,
-    Random? random = null): IDisposable
+    Random? random = null) : IDisposable
 {
     private const int MaxColumnCount = 7;
     private const double MinimumPolicyValue = 0.001;
@@ -47,7 +47,7 @@ public class Mcts(
         return new Mcts(maxIterations ?? MaxIterations, ValueNetwork?.Clone(), PolicyNetwork?.Clone(), _random);
     }
 
-    public Task<int> GetBestMove(
+    public async Task<int> GetBestMove(
         GameBoard gameBoard,
         int previousPlayer,
         double explorationFactor,
@@ -57,33 +57,37 @@ public class Mcts(
         Node rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
-        var stopwatch = Stopwatch.StartNew();
-        for (int i = 0; i < MaxIterations; i++)
-        //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
+        int bestMove = await Task.Run(() =>
         {
-            Node? childNode = useNetworks
-                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, isDeterministic)
-                : Select(rootNode, _random, explorationFactor);
+            var stopwatch = Stopwatch.StartNew();
+            for (int i = 0; i < MaxIterations; i++)
+            {
+                Node? childNode = useNetworks
+                    ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, isDeterministic)
+                    : Select(rootNode, _random, explorationFactor);
 
-            double result = useNetworks
-                ? Simulate(childNode, ValueNetwork!)
-                : Simulate(childNode, _random);
+                double result = useNetworks
+                    ? Simulate(childNode, ValueNetwork!)
+                    : Simulate(childNode, _random);
 
-            Backpropagate(childNode, result);
-        }
+                Backpropagate(childNode, result);
+            }
 
-        stopwatch.Stop();
-        UpdateTelemetryHistory(rootNode, _telemetryHistory);
+            stopwatch.Stop();
+            UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
-        Node? bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
-        if (bestChild != null)
-        {
-            bestChild.Parent = null;
-        }
+            Node? bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
+            if (bestChild != null)
+            {
+                bestChild.Parent = null;
+            }
 
-        _rootNode = bestChild;
+            _rootNode = bestChild;
 
-        return Task.FromResult(bestChild?.Move ?? -1);
+            return bestChild?.Move ?? -1;
+        });
+
+        return bestMove;
     }
 
     public TelemetryHistory GetTelemetryHistory()

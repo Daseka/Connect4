@@ -14,10 +14,11 @@ public partial class Form1 : Form
     private const int DeepLearningThreshold = 55;
     private const int DeepLearningThresholdMin = 35;
     private const double ErrorConfidence = 1.95;
-    private const double ExplorationConstant = 1.48;
+    private const double ExplorationConstant = 1.28;
     private const int MctsIterations = 400;
-    private const int SelfPlayGames = 1200;
-    private const int Patience = 15;
+    private const int SelfPlayGames = 1000;
+    private const int Patience = 7;
+    private const int MaxPatienceLevel = 2;
     private const string Unknown = "Random";
     private const int VsGames = 500;
     private readonly AgentCatalog _agentCatalog;
@@ -26,8 +27,8 @@ public partial class Form1 : Form
     private readonly TelemetryHistory _telemetryHistory = new();
     private readonly List<double> _yellowPercentHistory = [];
     private readonly TeacherQueue<Agent> _teacherQueue = new();
-    private const int MaxTeachingSessions = 3;
-    private const int TrainingSteps = 60;
+    private const int MaxTeachingSessions = 6;
+    private const int TrainingSteps = 100;
     private double _drawPercent;
     private double _redPercent;
     private double _redWithDrawPercent;
@@ -88,6 +89,7 @@ public partial class Form1 : Form
 
                     trainedAgent = null;
                 }
+
                 trainedAgent = nextAgent ?? new Mcts(MctsIterations, _redMcts.ValueNetwork!.Clone(), _redMcts.PolicyNetwork!.Clone());
                 _ = await TrainAsync(trainedAgent);
                 stopwatch.Stop();
@@ -164,8 +166,6 @@ public partial class Form1 : Form
                     textBox3.AddLine($"Boss Lives {ChampionsRemaining}: boss unfased need more training");
                 });
             }
-
-            
         }
     }
 
@@ -221,9 +221,9 @@ public partial class Form1 : Form
             textBox2.AddLine($" === Challenger {challengerAgent.LatestWinRate:f0}% " +
                 $"vs Champion {champions.Count - championToPlayAgainst} / {champions.Count} ===");
             var stopwatch2 = Stopwatch.StartNew();
-            
+
             _telemetryHistory.BeginAddingNewEntries();
-            
+
             Agent trainedAgent = CreateAgent(ExplorationConstant, trainedMcts, challengerAgent);
             (bool isImproved, bool isBetter, double currentGame1, double currentGame2) = await EvaluateAgentAlternate(
                 trainedAgent,
@@ -234,7 +234,6 @@ public partial class Form1 : Form
                 true,
                 VsGames);
             stopwatch2.Stop();
-            textBox2.AddLine($"Evaluation done in {stopwatch2.ElapsedMilliseconds} ms");
 
             if (isBetter)
             {
@@ -256,12 +255,13 @@ public partial class Form1 : Form
                 totalTeachers++;
 
                 _agentCatalog.Add(betterAgent);
-                
+                _agentCatalog.SaveCatalog();
+
                 _telemetryHistory.ClearAll();
 
                 champions = [.. _agentCatalog.Entries.Values];
 
-                textBox2.AddLine($"Better added as Teacher. Teacher total: {_teacherQueue.Count }");
+                textBox2.AddLine($"Better added as Teacher. Teacher total: {_teacherQueue.Count}");
             }
             else if (isImproved)
             {
@@ -272,7 +272,7 @@ public partial class Form1 : Form
 
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
 
-                textBox2.AddLine($"Improved. Teacher total: {_teacherQueue.Count }");
+                textBox2.AddLine($"Improved. Teacher total: {_teacherQueue.Count}");
             }
             else
             {
@@ -280,6 +280,8 @@ public partial class Form1 : Form
 
                 textBox2.AddLine($"No improvement session {_teacherAgent.TeachingSessions}. Teacher total: {_teacherQueue.Count}");
             }
+
+            textBox2.AddLine($"Evaluation done in {stopwatch2.Elapsed:hh\\:mm\\:ss}");
 
             if (_teacherAgent.TeachingSessions >= MaxTeachingSessions)
             {
@@ -296,7 +298,7 @@ public partial class Form1 : Form
 
                 _teacherAgent.Dispose();
                 _teacherAgent = _teacherQueue.Dequeue()!.Clone();
-                
+
                 textBox2.AddLine($"New teacher {_teacherAgent!.Generation} Teacher total: {_teacherQueue.Count}");
             }
 
@@ -308,6 +310,7 @@ public partial class Form1 : Form
 
             await SelfPlayParallel(_teacherAgent, SelfPlayGames);
             stopwatch.Stop();
+            textBox2.AddLine($"Selfplay done in {stopwatch.Elapsed:hh\\:mm\\:ss}");
 
             if (_arenaCancelationSource.IsCancellationRequested)
             {
@@ -318,13 +321,13 @@ public partial class Form1 : Form
 
             // 3 Train a new red network
             var stopwatch3 = Stopwatch.StartNew();
-            
+
             trainedMcts?.Dispose();
             trainedMcts = challengerAgent.ToMctsCloned(MctsIterations);
             _ = await TrainAsync(trainedMcts);
             stopwatch3.Stop();
 
-            textBox2.AddLine($"Training on Selfplay done in {stopwatch3.ElapsedMilliseconds} ms");
+            textBox2.AddLine($"Training done in {stopwatch3.Elapsed:hh\\:mm\\:ss}");
         }
     }
 
@@ -430,7 +433,6 @@ public partial class Form1 : Form
 
         double agent1Game1 = _redWithDrawPercent;
         double agent2Game1 = _yellowWithDrawPercent;
-
 
         // Now Evaluate the current agent against the trained network
         textBox2.AddLine($"Challenger {_redWithDrawPercent}% Champ {_yellowWithDrawPercent}%");
@@ -561,7 +563,7 @@ public partial class Form1 : Form
     {
         CancellationToken cancellationToken = _arenaCancelationSource.Token;
         int processorCount = Environment.ProcessorCount;
-        int parallelGames = Math.Max(2, processorCount);
+        int parallelGames = Math.Max(2, processorCount * 2);
 
         int totalGames = numberOfGames > 0 ? numberOfGames : SelfPlayGames;
 
@@ -754,6 +756,8 @@ public partial class Form1 : Form
 
         double valueValidationError = double.MaxValue;
         double policyValidationError = double.MaxValue;
+        int valuePatienceLevel = 1;
+        int policyPatienceLevel = 1;
         int clonedAtValueStep = 0;
         int clonedAtPolicyStep = 0;
 
@@ -763,20 +767,24 @@ public partial class Form1 : Form
 
             if (!valueStopEarly)
             {
-                valueError = valueTrainer.Train(trainingData, valueExpectedData);
+                double learningRate = GetValueLearningRate(valuePatienceLevel);
+                valueError = valueTrainer.Train(trainingData, valueExpectedData, learningRate);
                 valueValidationError = ComputeValidationError(mcts.ValueNetwork, validationData, validationValueData, isValue: true);
+                valueValidationError = Math.Round(valueValidationError, 8);
             }
 
             if (!policyStopEarly)
             {
-                policyError = policyTrainer.Train(trainingData, policyExpectedData);
+                double learningRate = GetPolicyLearningRate(policyPatienceLevel);
+                policyError = policyTrainer.Train(trainingData, policyExpectedData, learningRate);
                 policyValidationError = ComputeValidationError(mcts.PolicyNetwork, validationData, validationPolicyData, isValue: false);
+                policyValidationError = Math.Round(policyValidationError, 8);
             }
 
-            string valueArrow = valueError > previousValueError ? "🡹" : "🡻";
-            string policyArrow = policyError > previousPolicyError ? "🡹" : "🡻";
-            string valValueArrow = valueValidationError > bestValueValidation ? "🡹" : "🡻";
-            string valPolicyArrow = policyValidationError > bestPolicyValidation ? "🡹" : "🡻";
+            string valueArrow = valueError >= previousValueError ? "🡹" : "🡻";
+            string policyArrow = policyError >= previousPolicyError ? "🡹" : "🡻";
+            string valValueArrow = valueValidationError >= bestValueValidation ? "🡹" : "🡻";
+            string valPolicyArrow = policyValidationError >= bestPolicyValidation ? "🡹" : "🡻";
 
             Invoke(() =>
             {
@@ -785,7 +793,7 @@ public partial class Form1 : Form
             });
 
             // Early stop on Value
-            if (valueValidationError <= bestValueValidation)
+            if (valueValidationError < bestValueValidation)
             {
                 bestValueValidation = valueValidationError;
                 valuePatienceCounter = 0;
@@ -802,7 +810,7 @@ public partial class Form1 : Form
             }
 
             // Early stop on Policy
-            if (policyValidationError <= bestPolicyValidation)
+            if (policyValidationError < bestPolicyValidation)
             {
                 bestPolicyValidation = policyValidationError;
                 policyPatienceCounter = 0;
@@ -820,22 +828,52 @@ public partial class Form1 : Form
 
             if (!valueStopEarly && valuePatienceCounter >= Patience)
             {
-                Invoke(() =>
+                if (valuePatienceLevel < MaxPatienceLevel)
                 {
-                    vStop = $"V cloned at step {clonedAtValueStep}/{i}. Best val error: {Math.Round(bestValueValidation, 8):F8}";
-                    textBox3.AddLine(vStop);
-                });
-                valueStopEarly = true;
+                    //start agains with the best network so far using a lower learning rate
+                    mcts.ValueNetwork = tempValueNetwork.Clone();
+                    valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.ValueNetwork);
+
+                    double oldLearningRate = GetValueLearningRate(valuePatienceLevel);
+                    valuePatienceLevel++;
+                    valuePatienceCounter = 0;
+                    double newLearningRate = GetValueLearningRate(valuePatienceLevel);
+                    textBox3.AddLine($"V: learn rate {oldLearningRate} -> {newLearningRate}");
+                }
+                else
+                {
+                    Invoke(() =>
+                    {
+                        vStop = $"V cloned at step {clonedAtValueStep}/{i}. Best val error: {Math.Round(bestValueValidation, 8):F8}";
+                        textBox3.AddLine(vStop);
+                    });
+                    valueStopEarly = true;
+                }
             }
 
             if (!policyStopEarly && policyPatienceCounter >= Patience)
             {
-                Invoke(() =>
+                if (policyPatienceLevel < MaxPatienceLevel)
                 {
-                    pStop = $"P stop at step {clonedAtPolicyStep}/{i}. Best val error: {Math.Round(bestPolicyValidation, 8):F8}";
-                    textBox3.AddLine(pStop);
-                });
-                policyStopEarly = true;
+                    //start agains with the best network so far using a lower learning rate
+                    mcts.PolicyNetwork = tempPolicyNetwork.Clone();
+                    policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(mcts.PolicyNetwork);
+
+                    double oldLearningRate = GetPolicyLearningRate(policyPatienceLevel);
+                    policyPatienceLevel++;
+                    policyPatienceCounter = 0;
+                    double newLearningRate = GetPolicyLearningRate(policyPatienceLevel);
+                    textBox3.AddLine($"\t \t \t \t P: learn rate {oldLearningRate} -> {newLearningRate}");
+                }
+                else
+                {
+                    Invoke(() =>
+                    {
+                        pStop = $"P stop at step {clonedAtPolicyStep}/{i}. Best val error: {Math.Round(bestPolicyValidation, 8):F8}";
+                        textBox3.AddLine(pStop);
+                    });
+                    policyStopEarly = true;
+                }
             }
 
             if (valueStopEarly && policyStopEarly)
@@ -870,6 +908,20 @@ public partial class Form1 : Form
         });
 
         return Task.FromResult<(int, double)>((minPolicRuns, minPolicyError));
+    }
+
+    private static double GetValueLearningRate(int patienceLevel)
+    {
+        double[] valueLearningRates = [0.001, 0.0001, 0.00008];
+
+        return valueLearningRates[Math.Min(patienceLevel - 1, valueLearningRates.Length - 1)];
+    }
+
+    private static double GetPolicyLearningRate(int patienceLevel)
+    {
+        double[] valueLearningRates = [0.001, 0.0001, 0.00001];
+
+        return valueLearningRates[Math.Min(patienceLevel - 1, valueLearningRates.Length - 1)];
     }
 
     private static double ComputeValidationError(IStandardNetwork network, double[][] inputs, double[][] targets, bool isValue)
@@ -980,7 +1032,7 @@ public partial class Form1 : Form
         CancellationToken cancellationToken = _arenaCancelationSource.Token;
 
         int processorCount = Environment.ProcessorCount;
-        int parallelGames = Math.Max(2, processorCount - 1);
+        int parallelGames = Math.Max(2, processorCount * 2);
 
         int totalGames = vsGames ?? VsGames;
 

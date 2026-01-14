@@ -57,7 +57,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     static MiniBatchMatrixNetwork()
     {
-        // needed to use performant matrix operations
         Control.UseNativeMKL();
     }
 
@@ -280,8 +279,12 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
 
         var batchResults = new (Matrix<double>[] gradients, Vector<double>[] biasGradients, double errorSum, int sampleCount)[numBatches];
+        var options = new ParallelOptions 
+        { 
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) 
+        };
 
-        Parallel.For(0, numBatches, batchIndex =>
+        Parallel.For(0, numBatches, options, batchIndex =>
         {
             int batchStart = batchIndex * batchSize;
             int actualBatchSize = Math.Min(batchSize, total - batchStart);

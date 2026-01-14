@@ -83,8 +83,7 @@ public class TelemetryHistory
             (int redWins, int yellowWins, int draws, int total) stats = valueStatsForBoardState[info.BoardState];
             double total = stats.total;
 
-            values[i] = boardState[^1] == 1
-                ? [stats.redWins / total + stats.draws / total / 2]
+            values[i] = boardState[^1] == 1                 ? [stats.redWins / total + stats.draws / total / 2]
                 : [stats.yellowWins / total + stats.draws / total / 2];
         }
 

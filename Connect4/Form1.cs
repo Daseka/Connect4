@@ -295,8 +295,9 @@ public partial class Form1 : Form
         results = new List<string>();
         for (int i = 0; i < 200; i++)
         {
-            valueTrainer.Train(inputTrain, valueTrain);
-            policyTrainer.Train(inputTrain, policyTrain);
+            double learningRate = 0.01; 
+            valueTrainer.Train(inputTrain, valueTrain, learningRate);
+            policyTrainer.Train(inputTrain, policyTrain, learningRate);
             //valueTrainer.Train(inputTest, valueTest);
             //policyTrainer.Train(inputTest, policyTest);
         }
