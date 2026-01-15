@@ -69,10 +69,10 @@ public class Node
 
         double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard);
 
-        if (!isDeterministic)
-        {
-            DirchletNoise.AddNoise(policyProbability, random);
-        }
+        //if (!isDeterministic)
+        //{
+        //    DirchletNoise.AddNoise(policyProbability, random);
+        //}
 
         foreach (Node node in Children)
         {

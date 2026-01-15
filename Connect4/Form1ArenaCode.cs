@@ -21,6 +21,7 @@ public partial class Form1 : Form
     private const int MaxPatienceLevel = 2;
     private const string Unknown = "Random";
     private const int VsGames = 500;
+    private readonly int _processorCount = Environment.ProcessorCount + 2;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly List<double> _redPercentHistory = [];
@@ -562,8 +563,7 @@ public partial class Form1 : Form
     private async Task SelfPlayParallel(Agent agent, int numberOfGames)
     {
         CancellationToken cancellationToken = _arenaCancelationSource.Token;
-        int processorCount = Environment.ProcessorCount;
-        int parallelGames = Math.Max(2, processorCount * 2);
+        int parallelGames = Math.Max(2, _processorCount);
 
         int totalGames = numberOfGames > 0 ? numberOfGames : SelfPlayGames;
 
@@ -1020,6 +1020,7 @@ public partial class Form1 : Form
         });
     }
 
+
     private async Task<(int redWins, int yellowWins, int drawWins, int totalWins)>
         VsPlayParallel(
             Mcts mctsRed,
@@ -1031,9 +1032,7 @@ public partial class Form1 : Form
     {
         CancellationToken cancellationToken = _arenaCancelationSource.Token;
 
-        int processorCount = Environment.ProcessorCount;
-        int parallelGames = Math.Max(2, processorCount * 2);
-
+        int parallelGames = Math.Max(2, _processorCount);
         int totalGames = vsGames ?? VsGames;
 
         int gamesPerThread = totalGames / parallelGames;
@@ -1120,7 +1119,6 @@ public partial class Form1 : Form
                             gameEnded = true;
 
                             globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                            _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
                             continue;
                         }
@@ -1152,7 +1150,6 @@ public partial class Form1 : Form
                             });
 
                             globalStats[index] = (redWins, yellowWins, draws, gamesPlayed);
-                            _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
                             game.ResetGame();
                             gameEnded = true;
@@ -1165,6 +1162,8 @@ public partial class Form1 : Form
 
                     lock (sharedTelemetryHistory)
                     {
+                        _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
+
                         if ((Winner)winner == Winner.Red && !isChalengerRed)
                         {
                             _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
@@ -1180,8 +1179,6 @@ public partial class Form1 : Form
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
-
-        _ = BeginInvoke(() => UpdateGlobalStats(globalStats, totalGames));
 
         _ = BeginInvoke(() =>
         {
