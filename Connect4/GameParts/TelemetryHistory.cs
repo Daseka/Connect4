@@ -8,7 +8,7 @@ public class TelemetryHistory
     public const double Win = 1.0;
     public const double Loss = 0.0;
     public const double Draw = 0.5;
-    public const int MaxBufferSize = 1000000;
+    public const int MaxBufferSize = 3000000;
     private const string Folder = "Buffers";
     private const string FileName = "TrainingData.json";
 
@@ -83,7 +83,8 @@ public class TelemetryHistory
             (int redWins, int yellowWins, int draws, int total) stats = valueStatsForBoardState[info.BoardState];
             double total = stats.total;
 
-            values[i] = boardState[^1] == 1                 ? [stats.redWins / total + stats.draws / total / 2]
+            values[i] = boardState[^1] == 1                 
+                ? [stats.redWins / total + stats.draws / total / 2]
                 : [stats.yellowWins / total + stats.draws / total / 2];
         }
 

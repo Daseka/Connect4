@@ -2,7 +2,7 @@
 
 public class MiniBatchNetworkTrainer : INetworkTrainer
 {
-    public const int BatchSize = 5760;
+    public const int BatchSize = 8192;
 
     private readonly MiniBatchMatrixNetwork _network;
     
