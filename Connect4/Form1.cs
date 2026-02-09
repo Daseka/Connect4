@@ -17,8 +17,8 @@ public partial class Form1 : Form
     //private readonly int[] valueArray = [127, 2048, 512, 256, 64, 1];
     private readonly int[] valueArray = [127, 256, 128, 64, 1];
     private readonly int[] policyArray = [127, 256, 128, 64, 7];
-    //private readonly int[] valueArray = [127, 256, 128, 64, 64, 64, 1];
-    //private readonly int[] policyArray = [127, 256, 128, 64, 64, 64, 7];
+    //private readonly int[] valueArray = [127, 256, 128, 64, 64, 1];
+    //private readonly int[] policyArray = [127, 256, 128, 64, 64, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
     private CancellationTokenSource _coliseimCancelationSource = new();
     //private int _gamesPlayed = 0;
@@ -112,6 +112,13 @@ public partial class Form1 : Form
         var boardStateReaderControl = new BoardStateReaderControl(_agentCatalog) { Dock = DockStyle.Fill };
         tabPage4.Controls.Clear();
         tabPage4.Controls.Add(boardStateReaderControl);
+    }
+
+    private void NoVisualsCheckBox_CheckedChanged(object sender, EventArgs e)
+    {
+        ClientSize = noVisualsCheckBox.Checked 
+            ? new Size(1364, 600) 
+            : new Size(1364, 881);
     }
 
     private static int PlacePiece(

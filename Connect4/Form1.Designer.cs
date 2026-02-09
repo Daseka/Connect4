@@ -1,4 +1,5 @@
-﻿namespace Connect4
+﻿
+namespace Connect4
 {
     partial class Form1
     {
@@ -133,6 +134,7 @@
             noVisualsCheckBox.ForeColor = Color.White;
             noVisualsCheckBox.Text = "No Visuals";
             noVisualsCheckBox.UseVisualStyleBackColor = true;
+            noVisualsCheckBox.CheckedChanged += NoVisualsCheckBox_CheckedChanged;
             // 
             // button6
             // 
