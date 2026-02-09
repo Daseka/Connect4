@@ -69,6 +69,11 @@ public class Node
 
         double[] policyProbability = GetProbabilityCached(policyNetwork, GameBoard);
 
+        if (!isDeterministic)
+        {
+            DirchletNoise.AddNoise(policyProbability, random);
+        }
+
         foreach (Node node in Children)
         {
             double parentVisit = node.Parent?.Visits == 0 ? 1 : node.Parent?.Visits ?? 1;
@@ -129,7 +134,7 @@ public class Node
 
         // in deterministe mode select most visited after 2 moves to allow some exploration at start
         double temperature = movesPlayed < MovesThreshold ? 2 : 0;
-        if (temperature == 0 || (isDeterministic && movesPlayed > 1) || winningChild is not null)
+        if (temperature == 0 || (isDeterministic /*&& movesPlayed > 1*/) || winningChild is not null)
         {
             return winningChild ?? mostVisited;
         }

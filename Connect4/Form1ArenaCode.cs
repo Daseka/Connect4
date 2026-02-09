@@ -16,11 +16,12 @@ public partial class Form1 : Form
     private const int MaxPatienceLevel = 2;
     private const int MaxTeachingSessions = 6;
     private const int MctsIterations = 400;
+    private const int SelfPlayMctsIterations = 400;
     private const int Patience = 7;
     private const int SelfPlayGames = 2000;
-    private const int TrainingSteps = 100;
-    private const string Unknown = "Random";
-    private const int VsGames = 1500;
+    private const int TrainingSteps = 50;
+    private const int VsGames = 500;
+    private const double LossPenaltyWeight = 8.0;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly int _processorCount = Environment.ProcessorCount;
@@ -65,7 +66,7 @@ public partial class Form1 : Form
         List<Agent> champions = [championagent];
         int championToPlayAgainst = champions.Count;
 
-        _teacherQueue.Enqueue(championagent);
+        _teacherQueue.Enqueue(championagent.Clone());
 
         foreach (Agent agents in _agentCatalog.Entries.Values)
         {
@@ -112,17 +113,17 @@ public partial class Form1 : Form
 
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
                 challengerAgent.LatestWinRate = (currentGame1 + currentGame2) / 2;
+                challengerAgent.TrainingTime = stopwatchOverall.Elapsed;
 
                 _teacherAgent!.TeachingSessions = 0;
                 _teacherAgent.LatestWinRate = _teacherAgent.LatestWinRate == 0
                     ? challengerAgent.LatestWinRate
                     : _teacherAgent.LatestWinRate;
 
-                Agent betterAgent = challengerAgent.Clone();
-                _teacherQueue.Enqueue(betterAgent);
+                _teacherQueue.Enqueue(challengerAgent.Clone());
                 totalTeachers++;
 
-                _agentCatalog.Add(betterAgent);
+                _agentCatalog.Add(challengerAgent.Clone());
                 _agentCatalog.SaveCatalog();
 
                 _telemetryHistory.ClearAll();
@@ -137,6 +138,9 @@ public partial class Form1 : Form
                 previousImprovementGame2 = currentGame2;
 
                 _teacherAgent!.TeachingSessions = 0;
+
+                _telemetryHistory.ClearAll();
+
 
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
 
@@ -196,7 +200,7 @@ public partial class Form1 : Form
             stopwatch3.Stop();
 
             textBox2.AddLine($"Training done in {stopwatch3.Elapsed:hh\\:mm\\:ss}");
-            textBox2.AddLine($"Total time {stopwatchOverall.Elapsed:hh\\:mm\\:ss}");
+            textBox2.AddLine($"Total time {stopwatchOverall.Elapsed:dd\\.hh\\:mm\\:ss}");
         }
 
         stopwatchOverall.Stop();
@@ -267,7 +271,6 @@ public partial class Form1 : Form
             ValueNetwork = valueNetwork,
             PolicyNetwork = policyNetwork,
             Created = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
-            FirstKill = previousAgent?.Id ?? Unknown,
             Generation = previousAgent?.Generation + 1 ?? 0,
             ExplorationFactor = explorationFactor
         };
@@ -494,8 +497,8 @@ public partial class Form1 : Form
                     game = new CompactConnect4Game();
                 }
 
-                var redMcts = new Mcts(MctsIterations, agent.ValueNetwork!.Clone(), agent.PolicyNetwork!.Clone());
-                var yellowMcts = new Mcts(MctsIterations, agent.ValueNetwork.Clone(), agent.PolicyNetwork.Clone());
+                var redMcts = new Mcts(SelfPlayMctsIterations, agent.ValueNetwork!.Clone(), agent.PolicyNetwork!.Clone());
+                var yellowMcts = new Mcts(SelfPlayMctsIterations, agent.ValueNetwork.Clone(), agent.PolicyNetwork.Clone());
 
                 while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
                 {
@@ -1048,19 +1051,28 @@ public partial class Form1 : Form
                             RequestStatsUpdate(globalStats, totalGames);
                         }
 
-                        if ((Winner)winner == Winner.Red && !isChalengerRed)
+                        Mcts challengerMcts = isChalengerRed ? redMcts : yellowMcts;
+                        Mcts championMcts = isChalengerRed ? yellowMcts : redMcts;
+                        TelemetryHistory redHistory = redMcts.GetTelemetryHistory();
+                        TelemetryHistory yellowHistory = yellowMcts.GetTelemetryHistory();
+                        TelemetryHistory challengerHistory = isChalengerRed ? redHistory : yellowHistory;
+
+                        Winner winnerEnum = (Winner)winner;
+                        bool championWon = winnerEnum == Winner.Red && !isChalengerRed
+                            || winnerEnum == Winner.Yellow && isChalengerRed;
+
+                        if (championWon)
                         {
-                            _telemetryHistory.MergeFrom(redMcts.GetTelemetryHistory());
+                            challengerHistory.ApplyLossPenalty(LossPenaltyWeight);
+                            _telemetryHistory.MergeFrom(challengerHistory);
                         }
 
-                        if ((Winner)winner == Winner.Yellow && isChalengerRed)
-                        {
-                            _telemetryHistory.MergeFrom(yellowMcts.GetTelemetryHistory());
-                        }
+                        _telemetryHistory.MergeFrom(redHistory);
+                        _telemetryHistory.MergeFrom(yellowHistory);
+
+                        redMcts.ClearTelemetryHistory();
+                        yellowMcts.ClearTelemetryHistory();
                     }
-
-                    redMcts.ClearTelemetryHistory();
-                    yellowMcts.ClearTelemetryHistory();
                 }
             }));
         }

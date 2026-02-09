@@ -3,7 +3,7 @@ namespace Connect4.GameParts;
 [Serializable]
 public class TeacherQueue<T>
 {
-    private const int MaxCapacity = 10;
+    private const int MaxCapacity = 5;
     private readonly Queue<T> _queue = new();
     public int Count => _queue.Count;
 

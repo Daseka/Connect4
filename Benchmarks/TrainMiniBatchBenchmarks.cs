@@ -14,7 +14,7 @@ public class TrainMiniBatchBenchmarks
     [Params(64, 128, 256, 512, 1024, 2048, 4096, 8192)]
     public int BatchSize { get; set; }
 
-    [Params(100000)]
+    [Params(200000)]
     public int SampleCount { get; set; }
 
     [GlobalSetup]

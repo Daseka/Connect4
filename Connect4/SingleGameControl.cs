@@ -293,7 +293,7 @@ namespace Connect4
             {
                 var radioButton = new RadioButton
                 {
-                    Text = $"{agent.Id} (Gen: {agent.Generation} {agent.LatestWinRate:F2}%)",
+                    Text = $"{agent.TrainingTime:dd\\.hh\\:mm} (Gen: {agent.Generation} {agent.LatestWinRate:F2}%)",
                     Location = new Point(10, y),
                     AutoSize = true,
                     Tag = agent,

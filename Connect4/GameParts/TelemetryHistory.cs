@@ -8,7 +8,7 @@ public class TelemetryHistory
     public const double Win = 1.0;
     public const double Loss = 0.0;
     public const double Draw = 0.5;
-    public const int MaxBufferSize = 3000000;
+    public const int MaxBufferSize = 1000000;
     private const string Folder = "Buffers";
     private const string FileName = "TrainingData.json";
 
@@ -35,36 +35,37 @@ public class TelemetryHistory
         var all = BoardStateHistoricalInfos.ToList();
         int minimalCount = Math.Min(count, all.Count);
 
-        var valueStatsForBoardState = new Dictionary<string, (int redWins, int yellowWins, int draws, int total)>();
+        var valueStatsForBoardState = new Dictionary<string, (double redWins, double yellowWins, double draws, double weight)>();
         var sampled = new List<BoardStateHistoricInfo>(minimalCount);
 
         for (int i = minimalCount -1 ; i >= 0 ; i--)
         {
             BoardStateHistoricInfo info = all[i];
 
-            if (!valueStatsForBoardState.TryGetValue(info.BoardState, out (int redWins, int yellowWins, int draws, int total) stats))
+            if (!valueStatsForBoardState.TryGetValue(info.BoardState, out (double redWins, double yellowWins, double draws, double weight) stats))
             {
                 stats = (0, 0, 0, 0);
                 sampled.Add(info);
             }
 
-            stats.redWins += info.RedWins;
-            stats.yellowWins += info.YellowWins;
-            stats.draws += info.Draws;
-            stats.total += 1;
+            double weight = Math.Max(info.Weight, 0.01);
+            stats.redWins += info.RedWins * weight;
+            stats.yellowWins += info.YellowWins * weight;
+            stats.draws += info.Draws * weight;
+            stats.weight += weight;
             valueStatsForBoardState[info.BoardState] = stats;
         }
 
         var boardStateValues = new Dictionary<string, double[]>(valueStatsForBoardState.Count);
-        foreach (KeyValuePair<string, (int redWins, int yellowWins, int draws, int total)> kvp in valueStatsForBoardState)
+        foreach (KeyValuePair<string, (double redWins, double yellowWins, double draws, double weight)> kvp in valueStatsForBoardState)
         {
-            (int redWins, int yellowWins, int draws, int total) stats = kvp.Value;
-            double total = stats.total;
+            (double redWins, double yellowWins, double draws, double weight) stats = kvp.Value;
+            double totalWeight = Math.Max(stats.weight, 1e-9);
             boardStateValues[kvp.Key] =
             [
-                stats.redWins / total,
-                stats.yellowWins / total,
-                stats.draws / total
+                stats.redWins / totalWeight,
+                stats.yellowWins / totalWeight,
+                stats.draws / totalWeight
             ];
         }
 
@@ -80,12 +81,12 @@ public class TelemetryHistory
             inputs[i] = boardState;
             policies[i] = [.. info.Policy];
 
-            (int redWins, int yellowWins, int draws, int total) stats = valueStatsForBoardState[info.BoardState];
-            double total = stats.total;
+            (double redWins, double yellowWins, double draws, double weight) stats = valueStatsForBoardState[info.BoardState];
+            double totalWeight = Math.Max(stats.weight, 1e-9);
 
             values[i] = boardState[^1] == 1                 
-                ? [stats.redWins / total + stats.draws / total / 2]
-                : [stats.yellowWins / total + stats.draws / total / 2];
+                ? [stats.redWins / totalWeight + stats.draws / totalWeight / 2]
+                : [stats.yellowWins / totalWeight + stats.draws / totalWeight / 2];
         }
 
         return (inputs, policies, values);
@@ -97,7 +98,6 @@ public class TelemetryHistory
         int finalCount = Math.Min(count, all.Count);
         var chosen = new List<BoardStateHistoricInfo>(finalCount);
 
-        // Convert to arrays
         double[][] inputs = new double[finalCount][];
         double[][] policies = new double[finalCount][];
         double[][] values = new double[finalCount][];
@@ -148,19 +148,14 @@ public class TelemetryHistory
         var all = BoardStateHistoricalInfos.ToList();
         int total = all.Count;
 
-        // Index where new entries begin
         int startIndexOfNew = Math.Max(0, total - NewEntries);
         int availableNew = total - startIndexOfNew;
 
-        // Desired total samples
         int desired = count <= 0 ? total : Math.Min(count, total);
-
-        // Take as many new entries as will fit
         int takeNew = Math.Min(availableNew, desired);
 
         var chosen = new List<BoardStateHistoricInfo>(capacity: desired);
 
-        // Always include the most recent (takeNew) entries (preserve recency order)
         for (int i = total - takeNew; i < total; i++)
         {
             chosen.Add(all[i]);
@@ -168,15 +163,12 @@ public class TelemetryHistory
 
         int remaining = desired - takeNew;
 
-        // If we still need more, sample from the older pool [0, startIndexOfNew)
         if (remaining > 0 && startIndexOfNew > 0)
         {
             int oldPoolSize = startIndexOfNew;
 
             if (oldPoolSize >= remaining)
             {
-                // Sample without replacement
-                // Simple Fisher-Yates style partial shuffle
                 int[] indices = Enumerable.Range(0, oldPoolSize).ToArray();
                 for (int i = 0; i < remaining; i++)
                 {
@@ -187,7 +179,6 @@ public class TelemetryHistory
             }
             else
             {
-                // Not enough distinct old entries, sample with replacement
                 for (int i = 0; i < remaining; i++)
                 {
                     int idx = _random.Next(oldPoolSize);
@@ -196,7 +187,6 @@ public class TelemetryHistory
             }
         }
 
-        // Convert to arrays
         int finalCount = chosen.Count;
         double[][] inputs = new double[finalCount][];
         double[][] policies = new double[finalCount][];
@@ -247,6 +237,20 @@ public class TelemetryHistory
         }
 
         EnforceBufferLimit();
+    }
+
+    public void ApplyLossPenalty(double penaltyMultiplier)
+    {
+        if (penaltyMultiplier <= 1)
+        {
+            return;
+        }
+
+        foreach (BoardStateHistoricInfo info in BoardStateHistoricalInfos)
+        {
+            info.Weight = Math.Max(info.Weight, 1.0) * penaltyMultiplier;
+            info.IsLossSample = true;
+        }
     }
 
     public void SaveToFile()

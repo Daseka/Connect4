@@ -6,11 +6,11 @@ public class Agent : IDisposable
 {
     public string? Created { get; set; }
     public double ExplorationFactor { get; set; } = 1.0;
-    public string? FirstKill { get; set; }
     public int Generation { get; set; } = 0;
     public string? Id { get; set; }
     public int TeachingSessions { get; set; } = 0;
     public double LatestWinRate { get; set; } = 0.0;
+    public TimeSpan? TrainingTime { get; set; }
 
     [JsonIgnore]
     public IStandardNetwork? PolicyNetwork { get; set; }
@@ -29,7 +29,6 @@ public class Agent : IDisposable
         {
             Id = Guid.NewGuid().ToString()[..8],
             Created = Created,
-            FirstKill = FirstKill,
             PolicyNetwork = PolicyNetwork?.Clone(),
             ValueNetwork = ValueNetwork?.Clone(),
             ExplorationFactor = ExplorationFactor,
@@ -38,6 +37,7 @@ public class Agent : IDisposable
             PolicyPath = PolicyPath,
             TeachingSessions = TeachingSessions,
             LatestWinRate = LatestWinRate,
+            TrainingTime = TrainingTime,
         };
 
         return clone;
