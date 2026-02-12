@@ -166,7 +166,7 @@ public partial class Form1 : Form
                 previousImprovementGame1 = 0;
                 previousImprovementGame2 = 0;
                 _telemetryHistory.ClearAll();
-                challengerAgent = _teacherQueue.ToArray().Last().Clone();
+                //challengerAgent = _teacherQueue.ToArray().Last().Clone();
 
                 _teacherAgent.Dispose();
                 _teacherAgent = _teacherQueue.Dequeue()!.Clone();
