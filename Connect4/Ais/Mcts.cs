@@ -309,10 +309,20 @@ public class Mcts(
             policy[child.Move] = Math.Max(child.Visits / root.Visits, MinimumPolicyValue);
         }
 
-        // if the policy is all zero then dont store it because it means no moves are posible from this node
-        if (policy.Sum() == 0)
+        double sum = 0;
+        for (int i = 0; i < policy.Length; i++)
+        {
+            sum += policy[i];
+        }
+
+        if (sum == 0)
         {
             return;
+        }
+
+        for (int i = 0; i < policy.Length; i++)
+        {
+            policy[i] /= sum;
         }
 
         telemetryHistory.StoreTempData(root.GameBoard, policy);

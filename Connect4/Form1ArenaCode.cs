@@ -13,15 +13,15 @@ public partial class Form1 : Form
     private const int DeepLearningThreshold = 55;
     private const double ErrorConfidence = 1.95;
     private const double ExplorationConstant = 1.28;
-    private const int MaxPatienceLevel = 2;
+    private const double LossPenaltyWeight = 8.0;
+    private const int MaxPatienceLevel = 3;
     private const int MaxTeachingSessions = 6;
     private const int MctsIterations = 400;
-    private const int SelfPlayMctsIterations = 400;
-    private const int Patience = 7;
+    private const int Patience = 10;
     private const int SelfPlayGames = 2000;
-    private const int TrainingSteps = 50;
-    private const int VsGames = 500;
-    private const double LossPenaltyWeight = 8.0;
+    private const int SelfPlayMctsIterations = 400;
+    private const int TrainingSteps = 100;
+    private const int VsGames = 200;
     private readonly AgentCatalog _agentCatalog;
     private readonly List<double> _drawPercentHistory = [];
     private readonly int _processorCount = Environment.ProcessorCount;
@@ -138,9 +138,8 @@ public partial class Form1 : Form
                 previousImprovementGame2 = currentGame2;
 
                 _teacherAgent!.TeachingSessions = 0;
-
+                
                 _telemetryHistory.ClearAll();
-
 
                 challengerAgent = CreateAgent(ExplorationConstant, trainedMcts!, challengerAgent);
 
@@ -287,7 +286,7 @@ public partial class Form1 : Form
 
     private static double GetValueLearningRate(int patienceLevel)
     {
-        double[] valueLearningRates = [0.001, 0.0001, 0.00008];
+        double[] valueLearningRates = [0.001, 0.0001, 0.00001];
 
         return valueLearningRates[Math.Min(patienceLevel - 1, valueLearningRates.Length - 1)];
     }
@@ -640,7 +639,17 @@ public partial class Form1 : Form
         (double[][] fullTrainingData, double[][] fullPolicyExpectedData, double[][] fullValueExpectedData) = telemetryHistory
             .GetTrainingDataRandomAveragedNewFirst(_telemetryHistory.Count);
 
-        // Trin on 80% and validate with 20%
+        // Shuffle all arrays in sync before splitting
+        var shuffleRng = new Random();
+        for (int s = fullTrainingData.Length - 1; s > 0; s--)
+        {
+            int k = shuffleRng.Next(s + 1);
+            (fullTrainingData[s], fullTrainingData[k]) = (fullTrainingData[k], fullTrainingData[s]);
+            (fullPolicyExpectedData[s], fullPolicyExpectedData[k]) = (fullPolicyExpectedData[k], fullPolicyExpectedData[s]);
+            (fullValueExpectedData[s], fullValueExpectedData[k]) = (fullValueExpectedData[k], fullValueExpectedData[s]);
+        }
+
+        // Train on 80% and validate with 20%
         int trainCount = (int)(fullTrainingData.Length * 0.8);
         double[][] trainingData = [.. fullTrainingData.Take(trainCount)];
         double[][] policyExpectedData = [.. fullPolicyExpectedData.Take(trainCount)];
@@ -814,7 +823,7 @@ public partial class Form1 : Form
         int totalYellow = 0;
         int totalDraw = 0;
         int totalGames = 0;
-        int progressPercent= 0;
+        int progressPercent = 0;
 
         foreach ((int red, int yellow, int draw, int total) in globalStats.Values)
         {
@@ -1033,7 +1042,6 @@ public partial class Form1 : Form
                             game.ResetGame();
                             gameEnded = true;
 
-                            
                             RequestStatsUpdate(globalStats, totalGames);
                             if (!suppressVisuals)
                             {
@@ -1051,24 +1059,20 @@ public partial class Form1 : Form
                             RequestStatsUpdate(globalStats, totalGames);
                         }
 
-                        Mcts challengerMcts = isChalengerRed ? redMcts : yellowMcts;
-                        Mcts championMcts = isChalengerRed ? yellowMcts : redMcts;
                         TelemetryHistory redHistory = redMcts.GetTelemetryHistory();
                         TelemetryHistory yellowHistory = yellowMcts.GetTelemetryHistory();
                         TelemetryHistory challengerHistory = isChalengerRed ? redHistory : yellowHistory;
 
-                        Winner winnerEnum = (Winner)winner;
+                        var winnerEnum = (Winner)winner;
                         bool championWon = winnerEnum == Winner.Red && !isChalengerRed
                             || winnerEnum == Winner.Yellow && isChalengerRed;
 
                         if (championWon)
                         {
                             challengerHistory.ApplyLossPenalty(LossPenaltyWeight);
-                            _telemetryHistory.MergeFrom(challengerHistory);
                         }
 
-                        _telemetryHistory.MergeFrom(redHistory);
-                        _telemetryHistory.MergeFrom(yellowHistory);
+                        _telemetryHistory.MergeFrom(challengerHistory);
 
                         redMcts.ClearTelemetryHistory();
                         yellowMcts.ClearTelemetryHistory();
