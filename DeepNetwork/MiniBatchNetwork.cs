@@ -19,6 +19,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     // Adam optimizer state
     private readonly Matrix<double>[] _adamM;
+
     private readonly Vector<double>[] _adamMBias;
     private readonly Matrix<double>[] _adamV;
     private readonly Vector<double>[] _adamVBias;
@@ -31,11 +32,13 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
     // Matrix/Vector representations for batch training
     private Vector<double>[] _biases = [];
+
     private int[] _biasOffsets = [];
     private double[] _flatBiases = [];
 
     // Flat arrays for ultra-fast foward pass
     private double[] _flatWeights = [];
+
     private int[] _layerOffsets = [];
     private double[] _values = [];
     private int[] _weightOffsets = [];
@@ -50,10 +53,12 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
     public bool Softmax { get; }
     public bool Trained { get; set; }
 
+    public bool _disposed = false;
+
     static MiniBatchMatrixNetwork()
     {
-        // needed to use performant matrix operations
         Control.UseNativeMKL();
+        Control.MaxDegreeOfParallelism = 1;
     }
 
     public MiniBatchMatrixNetwork(int[] structure, bool isSoftmax)
@@ -97,19 +102,17 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
         for (int i = 0; i < structure.Length; i++)
         {
-            if (i == structure.Length - 1)
-            {
-                _activations[i] = Softmax
+            _activations[i] = i == structure.Length - 1
+                ? Softmax
                     ? new SoftMaxActivationFunction()
-                    : new TanhActivationFunction();
-            }
-            else
-            {
-                _activations[i] = new LeakyReLUActivationFunction();
-                //_activations[i] = new TanhActivationFunction();
-                //_activations[i] = new SigmoidActivationFunction();
-            }
-       }
+                    : new TanhActivationFunction()
+                : new LeakyReLUActivationFunction();
+        }
+    }
+
+    public void ResetAdamTimer()
+    {
+        _adamT = 0;
     }
 
     public static IStandardNetwork? CreateFromFile(string fileName)
@@ -260,18 +263,13 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         int totalCount = total * _structure[^1];
         int numBatches = (total + batchSize - 1) / batchSize;
 
-        // Create copies for threads to use
-        var weightsSnapshot = new Matrix<double>[_weights.Length];
-        var biasesSnapshot = new Vector<double>[_biases.Length];
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            weightsSnapshot[i] = _weights[i].Clone();
-            biasesSnapshot[i] = _biases[i].Clone();
-        }
-
         var batchResults = new (Matrix<double>[] gradients, Vector<double>[] biasGradients, double errorSum, int sampleCount)[numBatches];
+        var options = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount)
+        };
 
-        Parallel.For(0, numBatches, batchIndex =>
+        _ = Parallel.For(0, numBatches, options, batchIndex =>
         {
             int batchStart = batchIndex * batchSize;
             int actualBatchSize = Math.Min(batchSize, total - batchStart);
@@ -295,7 +293,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             }
 
             (Matrix<double>[] batchGradients, Vector<double>[] batchBiasGradients, Matrix<double> output) =
-                ComputeBatchGradients(batchInputs, batchTargets, weightsSnapshot, biasesSnapshot, _activations);
+                ComputeBatchGradients(batchInputs, batchTargets, _weights, _biases, _activations);
 
             // Calculate error for this batch
             double batchErrorSum = 0;
@@ -313,7 +311,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                         // Cross-entropy loss for softmax outputs
                         double p = Math.Max(target, NearNullValue);
                         double q = Math.Max(outputValue, NearNullValue);
-                        //batchErrorSum += p * Math.Log(p / q);
                         batchErrorSum += -p * Math.Log(q);
                     }
                     else
@@ -334,7 +331,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
 
         for (int batchIndex = 0; batchIndex < numBatches; batchIndex++)
         {
-            var (batchGradients, batchBiasGradients, batchErrorSum, sampleCount) = batchResults[batchIndex];
+            (Matrix<double>[]? batchGradients, Vector<double>[]? batchBiasGradients, double batchErrorSum, int sampleCount) = batchResults[batchIndex];
 
             // Weight the gradients by batch size
             for (int l = 0; l < Gradients.Length; l++)
@@ -424,7 +421,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 {
                     double target = batchTargets[i, j];
                     double outputValue = output[i, j];
-                    double difference = (outputValue - target);
+                    double difference = outputValue - target;
                     deltas[^1][i, j] = difference * activationFunctions[^1].Derivative(output[i, j]);
                 }
             }
@@ -450,7 +447,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
     private static double DotProduct(ReadOnlySpan<double> values, ReadOnlySpan<double> weights)
     {
         int i = 0;
-        double sum = 0.0;
+        double sum = 0;
 
         if (SystemVector.IsHardwareAccelerated)
         {
@@ -490,7 +487,7 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         double beta = 0.7 * Math.Pow(outputSize, 1.0 / inputSize);
         for (int i = 0; i < outputSize; i++)
         {
-            double norm = 0.0;
+            double norm = 0;
             for (int j = 0; j < inputSize; j++)
             {
                 weights[i, j] = random.NextDouble() - 0.5;
@@ -505,13 +502,13 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
         }
     }
 
-    private static void MultiplyByDerivative(Matrix<double> delta, Matrix<double> values, IActivationFunction act)
+    private static void MultiplyByDerivative(Matrix<double> delta, Matrix<double> values, IActivationFunction activationFunction)
     {
         for (int i = 0; i < delta.RowCount; i++)
         {
             for (int j = 0; j < delta.ColumnCount; j++)
             {
-                delta[i, j] *= act.Derivative(values[i, j]);
+                delta[i, j] *= activationFunction.Derivative(values[i, j]);
             }
         }
     }
@@ -576,7 +573,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             int weightStart = _weightOffsets[layer];
             int biasStart = _biasOffsets[layer];
 
-            // Copy weights
             Matrix<double> matrix = _weights[layer];
             int idx = weightStart;
             for (int row = 0; row < matrix.RowCount; row++)
@@ -587,7 +583,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 }
             }
 
-            // Copy biases
             Vector<double> biasVector = _biases[layer];
             for (int i = 0; i < biasVector.Count; i++)
             {
@@ -603,7 +598,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             int weightStart = _weightOffsets[layer];
             int biasStart = _biasOffsets[layer];
 
-            // Copy weights
             Matrix<double> matrix = _weights[layer];
             int idx = weightStart;
             for (int row = 0; row < matrix.RowCount; row++)
@@ -614,7 +608,6 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
                 }
             }
 
-            // Copy biases
             Vector<double> biasVector = _biases[layer];
             for (int i = 0; i < biasVector.Count; i++)
             {
@@ -641,8 +634,8 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             _adamV[layer].Multiply(beta2, _adamV[layer]);
             _adamV[layer] += Gradients[layer].PointwisePower(2.0) * (1 - beta2);
 
-            var mHat = _adamM[layer] / b1Corr;
-            var vHat = _adamV[layer] / b2Corr;
+            Matrix<double> mHat = _adamM[layer] / b1Corr;
+            Matrix<double> vHat = _adamV[layer] / b2Corr;
             _weights[layer] -= mHat.PointwiseDivide(vHat.PointwiseSqrt() + epsilon) * learningRate;
 
             // Biases
@@ -651,9 +644,104 @@ public class MiniBatchMatrixNetwork : IStandardNetwork
             _adamVBias[layer].Multiply(beta2, _adamVBias[layer]);
             _adamVBias[layer] += GradientBiases[layer].PointwisePower(2.0) * (1 - beta2);
 
-            var mHatB = _adamMBias[layer] / b1Corr;
-            var vHatB = _adamVBias[layer] / b2Corr;
+            Vector<double> mHatB = _adamMBias[layer] / b1Corr;
+            Vector<double> vHatB = _adamVBias[layer] / b2Corr;
             _biases[layer] -= mHatB.PointwiseDivide(vHatB.PointwiseSqrt() + epsilon) * learningRate;
+        }
+    }
+
+    /// <summary>
+    /// Trying to free up memory faster
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _cachedValues.Clear();
+            while (_cacheKeys.TryDequeue(out _))
+            {
+            }
+
+            if (_weights != null)
+            {
+                for (int i = 0; i < _weights.Length; i++)
+                {
+                    _weights[i] = null!;
+                }
+            }
+
+            if (_biases != null)
+            {
+                for (int i = 0; i < _biases.Length; i++)
+                {
+                    _biases[i] = null!;
+                }
+            }
+
+            if (Gradients != null)
+            {
+                for (int i = 0; i < Gradients.Length; i++)
+                {
+                    Gradients[i] = null!;
+                }
+            }
+
+            if (GradientBiases != null)
+            {
+                for (int i = 0; i < GradientBiases.Length; i++)
+                {
+                    GradientBiases[i] = null!;
+                }
+            }
+
+            if (_adamM != null)
+            {
+                for (int i = 0; i < _adamM.Length; i++)
+                {
+                    _adamM[i] = null!;
+                }
+            }
+
+            if (_adamV != null)
+            {
+                for (int i = 0; i < _adamV.Length; i++)
+                {
+                    _adamV[i] = null!;
+                }
+            }
+
+            if (_adamMBias != null)
+            {
+                for (int i = 0; i < _adamMBias.Length; i++)
+                {
+                    _adamMBias[i] = null!;
+                }
+            }
+
+            if (_adamVBias != null)
+            {
+                for (int i = 0; i < _adamVBias.Length; i++)
+                {
+                    _adamVBias[i] = null!;
+                }
+            }
+
+            _flatWeights = [];
+            _flatBiases = [];
+            _values = [];
+            _layerOffsets = [];
+            _weightOffsets = [];
+            _biasOffsets = [];
+        }
+        finally
+        {
+            _disposed = true;
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -1,11 +1,11 @@
 namespace DeepNetwork;
 
-public interface IStandardNetwork
+public interface IStandardNetwork : IDisposable
 {
     public static abstract string NetworkName { get; }
 
     public bool Trained { get; set; }
-    
+
     public static abstract IStandardNetwork? CreateFromFile(string fileName);
 
     public double[] Calculate(double[] input);

@@ -168,7 +168,7 @@ namespace Connect4
             PictureBox pictureBox)
         {
             int winner = connect4Game.PlacePieceClick(clickEvent, pictureBox);
-            pictureBox.Invoke(pictureBox.Refresh);
+            pictureBox.BeginInvoke(pictureBox.Refresh);
 
             return winner;
         }
@@ -205,7 +205,7 @@ namespace Connect4
             string startMessage = _selectedRemoteGameModes == AiVsRemote
                 ? "Starting game: AI (Red) vs Remote \n Making first move..."
                 : "Starting game: Remote vs AI (Yellow)\n Listening for move..";
-            BeginInvoke(() => _messageConsole?.AppendText($"{startMessage}" + Environment.NewLine));
+            _messageConsole?.AddLine($"{startMessage}");
 
             while (_game.Winner == Winner.StillPlaying && !_game.GameBoard.HasDraw())
             {
@@ -214,7 +214,7 @@ namespace Connect4
                 {
                     int move = await PerformAiMoveOnly(_redMcts);
                     await communicator.SendAsync($"{move}");
-                    Invoke(() => _messageConsole?.AppendText($"Sening move:\t {move}" + Environment.NewLine));
+                    _messageConsole?.AddLine($"Sening move:\t {move}");
 
                     int val = await GetRemoteResponse(communicator);
                     if (val == -1)
@@ -222,7 +222,7 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+                    _messageConsole?.AddLine($"Recieved move:\t {val}");
                 }
                 else
                 {
@@ -232,11 +232,11 @@ namespace Connect4
                         break;
                     }
                     _game.PlacePieceColumn(val);
-                    Invoke(() => _messageConsole?.AppendText($"Recieved move:\t {val}" + Environment.NewLine));
+                    _messageConsole?.AddLine($"Recieved move:\t {val}");
 
                     int move = await PerformAiMoveOnly(_yellowMcts);
                     await communicator.SendAsync($"{move}");
-                    Invoke(() => _messageConsole?.AppendText($"Sending move:\t {move}" + Environment.NewLine));
+                    _messageConsole?.AddLine($"Sending move:\t {move}");
                 }
             }
 
@@ -264,7 +264,7 @@ namespace Connect4
         {
             mcts.SetWinnerTelemetryHistory(connect4Game.Winner);
             connect4Game.ResetGame();
-            pictureBox.Invoke(pictureBox.Refresh);
+            pictureBox.BeginInvoke(pictureBox.Refresh);
             moveHistory.Clear();
 
             DisplayBoardStateHistory();
@@ -293,7 +293,7 @@ namespace Connect4
             {
                 var radioButton = new RadioButton
                 {
-                    Text = $"{agent.Id} (Gen: {agent.Generation})",
+                    Text = $"{agent.TrainingTime:dd\\.hh\\:mm} (Gen: {agent.Generation} {agent.LatestWinRate:F2}%)",
                     Location = new Point(10, y),
                     AutoSize = true,
                     Tag = agent,
@@ -402,7 +402,7 @@ namespace Connect4
         {
             int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
             _ = _game.PlacePieceColumn(aiMove);
-            _pictureBox.Refresh();
+            _pictureBox.BeginInvoke(() => _pictureBox.Refresh());
 
             UpdateBoardStateHistory();
 
@@ -424,7 +424,7 @@ namespace Connect4
             int aiMove = await mcts.GetBestMove(_game.GameBoard, (int)_game.GameBoard.LastPlayed, ExplorationFactor, _moveHistory.Count, true);
 
             _ = _game.PlacePieceColumn(aiMove);
-            _pictureBox.Refresh();
+            _pictureBox.BeginInvoke(() => _pictureBox.Refresh());
 
             UpdateBoardStateHistory();
 
@@ -487,6 +487,9 @@ namespace Connect4
                 _selectedAgent = radioButton.Tag as Agent;
                 if (_selectedAgent != null)
                 {
+                    try { _redMcts.PolicyNetwork?.Dispose(); } catch { }
+                    try { _redMcts.ValueNetwork?.Dispose(); } catch { }
+
                     _redMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
                     _redMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
                 }
@@ -512,7 +515,7 @@ namespace Connect4
                 return;
             }
 
-            _ = BeginInvoke(() => _messageConsole?.AppendText($"Connecting to {ipInfo[0]}:{port}" + Environment.NewLine));
+            _messageConsole?.AddLine($"Connecting to {ipInfo[0]}:{port}");
 
             _communicator?.Dispose();
             _communicator = new Communicator(IncomingPort, ipInfo[0], port);
@@ -546,7 +549,7 @@ namespace Connect4
                 Invoke(() =>
                 {
                     _ = _game.PlacePieceColumn(aiMove);
-                    _pictureBox.Refresh();
+                    _pictureBox.BeginInvoke(_pictureBox.Refresh);
                 });
 
                 UpdateBoardStateHistory();
@@ -575,7 +578,7 @@ namespace Connect4
                 string prevState = _moveHistory.Pop();
                 _game.SetState(prevState);
                 _game.CurrentPlayer = _game.CurrentPlayer == 1 ? 2 : 1;
-                _pictureBox.Refresh();
+                _pictureBox.BeginInvoke(_pictureBox.Refresh);
             }
         }
 
@@ -598,6 +601,9 @@ namespace Connect4
                 _selectedAgent = radioButton.Tag as Agent;
                 if (_selectedAgent != null)
                 {
+                    try { _yellowMcts.PolicyNetwork?.Dispose(); } catch { }
+                    try { _yellowMcts.ValueNetwork?.Dispose(); } catch { }
+
                     _yellowMcts.PolicyNetwork = _selectedAgent.PolicyNetwork?.Clone();
                     _yellowMcts.ValueNetwork = _selectedAgent.ValueNetwork?.Clone();
                 }

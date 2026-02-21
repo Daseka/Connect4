@@ -15,13 +15,13 @@ public partial class Form1 : Form
 
     //private readonly int[] policyArray = [127, 2048, 512, 256, 64, 7];
     //private readonly int[] valueArray = [127, 2048, 512, 256, 64, 1];
-    //private readonly int[] valueArray = [127, 256, 128, 64, 1];
-    //private readonly int[] policyArray = [127, 256, 128, 64, 7];
-    private readonly int[] valueArray = [127, 256, 128, 64, 64, 64, 1];
-    private readonly int[] policyArray = [127, 256, 128, 64, 64, 64, 7];
+    private readonly int[] valueArray = [127, 256, 128, 64, 1];
+    private readonly int[] policyArray = [127, 256, 128, 64, 7];
+    //private readonly int[] valueArray = [127, 256, 128, 64, 64, 1];
+    //private readonly int[] policyArray = [127, 256, 128, 64, 64, 7];
     private CancellationTokenSource _arenaCancelationSource = new();
     private CancellationTokenSource _coliseimCancelationSource = new();
-    private int _gamesPlayed = 0;
+    //private int _gamesPlayed = 0;
     private bool _isBattleArenaRunning = false;
     private bool _isBattleColiseumRunning = false;
     private bool _isParallelSelfPlayRunning;
@@ -112,6 +112,13 @@ public partial class Form1 : Form
         var boardStateReaderControl = new BoardStateReaderControl(_agentCatalog) { Dock = DockStyle.Fill };
         tabPage4.Controls.Clear();
         tabPage4.Controls.Add(boardStateReaderControl);
+    }
+
+    private void NoVisualsCheckBox_CheckedChanged(object sender, EventArgs e)
+    {
+        ClientSize = noVisualsCheckBox.Checked 
+            ? new Size(1364, 600) 
+            : new Size(1364, 881);
     }
 
     private static int PlacePiece(
@@ -271,7 +278,7 @@ public partial class Form1 : Form
         INetworkTrainer valueTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldValueNetwork);
         INetworkTrainer policyTrainer = NetworkTrainerFactory.CreateNetworkTrainer(_oldPolicyNetwork);
 
-        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _telemetryHistory.GetTrainingDataRandom(1000);
+        (double[][] input, double[][] policyOutput, double[][] valueOutput) trainingData = _telemetryHistory.GetTrainingDataRandomAveragedNewFirst(_telemetryHistory.Count);
 
         double[][] inputTrain = [.. trainingData.input.Skip(100)];
         double[][] inputTest = [.. trainingData.input.Take(100)];
@@ -295,8 +302,9 @@ public partial class Form1 : Form
         results = new List<string>();
         for (int i = 0; i < 200; i++)
         {
-            valueTrainer.Train(inputTrain, valueTrain);
-            policyTrainer.Train(inputTrain, policyTrain);
+            double learningRate = 0.01; 
+            valueTrainer.Train(inputTrain, valueTrain, learningRate);
+            policyTrainer.Train(inputTrain, policyTrain, learningRate);
             //valueTrainer.Train(inputTest, valueTest);
             //policyTrainer.Train(inputTest, policyTest);
         }

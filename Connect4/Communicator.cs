@@ -11,7 +11,7 @@ namespace Connect4
         private readonly int _outgoingPort;
         private readonly UdpClient? _udpClient;
         private readonly IPEndPoint? _remoteEndPoint;
-        private CancellationTokenSource _cancellationTokenSource = new();
+        private readonly CancellationTokenSource _cancellationTokenSource = new();
 
         public Communicator(int incomingPort, string outgoingIp, int outgoingPort)
         {
@@ -34,7 +34,7 @@ namespace Connect4
 
         public async Task<string> ListenAsync()
         {
-            _ = _udpClient ?? throw new InvalidOperationException("UDP client is not initialized.");
+            _ = _udpClient ?? throw new InvalidOperationException("no client");
 
             try
             {
@@ -49,7 +49,7 @@ namespace Connect4
 
         public async Task SendAsync(string message)
         {
-            _ = _udpClient ?? throw new InvalidOperationException("UDP client is not initialized.");
+            _ = _udpClient ?? throw new InvalidOperationException("no client");
             
             byte[] data = Encoding.UTF8.GetBytes(message);
            

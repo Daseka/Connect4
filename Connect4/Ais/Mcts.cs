@@ -8,13 +8,14 @@ public class Mcts(
     int maxIterations,
     IStandardNetwork? valueNetwork = null,
     IStandardNetwork? policyNetwork = null,
-    Random? random = null)
+    Random? random = null) : IDisposable
 {
     private const int MaxColumnCount = 7;
     private const double MinimumPolicyValue = 0.001;
     private readonly Random _random = random ?? new();
     private readonly TelemetryHistory _telemetryHistory = new();
     private Node? _rootNode;
+    private bool _disposed = false;
 
     public int MaxIterations { get; set; } = maxIterations;
     public IStandardNetwork? PolicyNetwork { get; set; } = policyNetwork;
@@ -46,7 +47,7 @@ public class Mcts(
         return new Mcts(maxIterations ?? MaxIterations, ValueNetwork?.Clone(), PolicyNetwork?.Clone(), _random);
     }
 
-    public Task<int> GetBestMove(
+    public async Task<int> GetBestMove(
         GameBoard gameBoard,
         int previousPlayer,
         double explorationFactor,
@@ -56,33 +57,37 @@ public class Mcts(
         Node rootNode = FindRootNode(gameBoard, previousPlayer);
         bool useNetworks = PolicyNetwork?.Trained == true && ValueNetwork?.Trained == true;
 
-        var stopwatch = Stopwatch.StartNew();
-        for (int i = 0; i < MaxIterations; i++)
-        //while (stopwatch.ElapsedMilliseconds < _maxMiliseconds)
+        int bestMove = await Task.Run(() =>
         {
-            Node? childNode = useNetworks
-                ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, isDeterministic)
-                : Select(rootNode, _random, explorationFactor);
+            var stopwatch = Stopwatch.StartNew();
+            for (int i = 0; i < MaxIterations; i++)
+            {
+                Node? childNode = useNetworks
+                    ? Select(rootNode, _random, PolicyNetwork!, explorationFactor, isDeterministic)
+                    : Select(rootNode, _random, explorationFactor);
 
-            double result = useNetworks
-                ? Simulate(childNode, ValueNetwork!)
-                : Simulate(childNode, _random);
+                double result = useNetworks
+                    ? Simulate(childNode, ValueNetwork!)
+                    : Simulate(childNode, _random);
 
-            Backpropagate(childNode, result);
-        }
+                Backpropagate(childNode, result);
+            }
 
-        stopwatch.Stop();
-        UpdateTelemetryHistory(rootNode, _telemetryHistory);
+            stopwatch.Stop();
+            UpdateTelemetryHistory(rootNode, _telemetryHistory);
 
-        Node? bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
-        if (bestChild != null)
-        {
-            bestChild.Parent = null;
-        }
+            Node? bestChild = rootNode.GetMostValuableChild(movesPlayed, isDeterministic);
+            if (bestChild != null)
+            {
+                bestChild.Parent = null;
+            }
 
-        _rootNode = bestChild;
+            _rootNode = bestChild;
 
-        return Task.FromResult(bestChild?.Move ?? -1);
+            return bestChild?.Move ?? -1;
+        });
+
+        return bestMove;
     }
 
     public TelemetryHistory GetTelemetryHistory()
@@ -90,9 +95,43 @@ public class Mcts(
         return _telemetryHistory;
     }
 
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            PolicyNetwork?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            ValueNetwork?.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            _telemetryHistory?.ClearAll();
+        }
+        catch { }
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
     public void SetWinnerTelemetryHistory(Winner winner)
     {
         _telemetryHistory.StoreWinnerData(winner);
+    }
+
+    public void ClearTelemetryHistory()
+    {
+        _telemetryHistory.ClearAll();
     }
 
     private static void Backpropagate(Node node, double result)
@@ -241,7 +280,6 @@ public class Mcts(
         if (node.IsLeaf())
         {
             return Expand(node, random);
-            //Expand(node, random);
         }
 
         Node? bestChild = node.GetBestChild(policyNetwork, explorationFactor, random, isDeterministic);
@@ -271,10 +309,20 @@ public class Mcts(
             policy[child.Move] = Math.Max(child.Visits / root.Visits, MinimumPolicyValue);
         }
 
-        // if the policy is all zero then dont store it because it means no moves are posible from this node
-        if (policy.Sum() == 0)
+        double sum = 0;
+        for (int i = 0; i < policy.Length; i++)
+        {
+            sum += policy[i];
+        }
+
+        if (sum == 0)
         {
             return;
+        }
+
+        for (int i = 0; i < policy.Length; i++)
+        {
+            policy[i] /= sum;
         }
 
         telemetryHistory.StoreTempData(root.GameBoard, policy);

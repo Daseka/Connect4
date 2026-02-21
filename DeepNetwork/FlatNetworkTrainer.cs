@@ -14,7 +14,7 @@ public class FlatNetworkTrainer : INetworkTrainer
         _network = flatNetwork;
     }
 
-    public double Train(double[][] trainingInputs, double[][] trainingOutputs)
+    public double Train(double[][] trainingInputs, double[][] trainingOutputs, double? learningRate)
     {
         _network.Error = 0;
 
@@ -80,7 +80,16 @@ public class FlatNetworkTrainer : INetworkTrainer
         _network.Error = totalError / threads;
 
         //_network.UpdateWeights();
-        _network.UpdateWeightsAdam();
+        // Respect requested learning rate when updating with Adam; fall back to default when not provided
+        if (learningRate.HasValue)
+        {
+            _network.UpdateWeightsAdam(learningRate.Value);
+        }
+        else
+        {
+            _network.UpdateWeightsAdam();
+        }
+
         _network.Trained = true;
         _network.LastError = _network.Error;
         _network.ClearCache();

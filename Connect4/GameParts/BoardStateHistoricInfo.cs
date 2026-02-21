@@ -8,5 +8,7 @@ public class BoardStateHistoricInfo(string boardState)
     public int Draws { get; set; } = 0;
     public int RedWins { get; set; } = 0;
     public int YellowWins { get; set; } = 0;
-    public double[] Policy { get; set; } = []; 
+    public double[] Policy { get; set; } = [];
+    public double Weight { get; set; } = 1.0;
+    public bool IsLossSample { get; set; } = false;
 }

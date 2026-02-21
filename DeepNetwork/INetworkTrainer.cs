@@ -2,6 +2,6 @@
 {
     public interface INetworkTrainer
     {
-        double Train(double[][] trainingInputs, double[][] trainingOutputs);
+        double Train(double[][] trainingInputs, double[][] trainingOutputs, double? learnRate);
     }
 }

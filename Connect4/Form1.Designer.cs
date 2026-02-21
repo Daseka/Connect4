@@ -1,4 +1,5 @@
-﻿namespace Connect4
+﻿
+namespace Connect4
 {
     partial class Form1
     {
@@ -35,6 +36,7 @@
             button2 = new Button();
             textBox3 = new TextBox();
             button5 = new Button();
+            noVisualsCheckBox = new CheckBox();
             button6 = new Button();
             winPercentChart = new Connect4.GameParts.SimpleChart();
             flowLayoutPanel1 = new FlowLayoutPanel();
@@ -74,6 +76,7 @@
             tabPage1.Controls.Add(button2);
             tabPage1.Controls.Add(textBox3);
             tabPage1.Controls.Add(button5);
+            tabPage1.Controls.Add(noVisualsCheckBox);
             tabPage1.Controls.Add(button6);
             tabPage1.Controls.Add(winPercentChart);
             tabPage1.Controls.Add(flowLayoutPanel1);
@@ -120,6 +123,18 @@
             button5.Text = "Arena";
             button5.UseVisualStyleBackColor = true;
             button5.Click += Arena_Click;
+            // 
+            // noVisualsCheckBox
+            // 
+            noVisualsCheckBox.AutoSize = true;
+            noVisualsCheckBox.Location = new Point(909, 13);
+            noVisualsCheckBox.Name = "noVisualsCheckBox";
+            noVisualsCheckBox.Size = new Size(88, 19);
+            noVisualsCheckBox.TabIndex = 14;
+            noVisualsCheckBox.ForeColor = Color.White;
+            noVisualsCheckBox.Text = "No Visuals";
+            noVisualsCheckBox.UseVisualStyleBackColor = true;
+            noVisualsCheckBox.CheckedChanged += NoVisualsCheckBox_CheckedChanged;
             // 
             // button6
             // 
@@ -289,5 +304,6 @@
         private TextBox textBox1;
         private Button button2;
         private TextBox textBox2;
+        private CheckBox noVisualsCheckBox;
     }
 }

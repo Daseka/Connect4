@@ -55,12 +55,6 @@ public partial class Form1 : Form
                 });
             }
         }
-
-        _ = BeginInvoke(() =>
-        {
-            toolStripStatusLabel1.Text = "Coliseum completed!";
-            _isParallelSelfPlayRunning = false;
-        });
     }
 
     private async Task<(int redWins, int yellowWins, int drawWins, int totalWins)> 
@@ -124,6 +118,7 @@ public partial class Form1 : Form
                     while (!cancellationToken.IsCancellationRequested && gamesPlayed < gamesToPlay)
                     {
                         bool gameEnded = false;
+                        int playedMoves = 0;
 
                         while (!gameEnded && !cancellationToken.IsCancellationRequested)
                         {
@@ -134,8 +129,10 @@ public partial class Form1 : Form
                                 game.GameBoard, 
                                 (int)game.GameBoard.LastPlayed, 
                                 factor,
-                                0,
+                                playedMoves,
                                 true);
+
+                            playedMoves++;
 
                             if (move == -1)
                             {
