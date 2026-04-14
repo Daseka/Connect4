@@ -56,17 +56,18 @@ public partial class Form1 : Form
 
         Agent? strongestAgent = _agentCatalog.GetLatestAgents(1).FirstOrDefault();
         Agent challengerAgent = strongestAgent?.Clone() ?? CreateAgent(ExplorationConstant, randomMcts, null);
+        challengerAgent.ValueNetwork!.Trained = true;
+        challengerAgent.PolicyNetwork!.Trained = true;
 
         Mcts trainedMcts = challengerAgent.ToMctsCloned(MctsIterations);
-        trainedMcts.PolicyNetwork!.Trained = true;
-        trainedMcts.ValueNetwork!.Trained = true;
+        //trainedMcts.PolicyNetwork!.Trained = true;
+        //trainedMcts.ValueNetwork!.Trained = true;
 
         Agent championagent = CreateAgent(ExplorationConstant, randomMcts, null);
 
-        List<Agent> champions = [championagent];
-        int championToPlayAgainst = champions.Count;
-
-        _teacherQueue.Enqueue(championagent.Clone());
+        //_teacherQueue.Enqueue(championagent.Clone());
+        
+        _teacherQueue.Enqueue(challengerAgent.Clone()); 
 
         foreach (Agent agents in _agentCatalog.Entries.Values)
         {
@@ -77,18 +78,15 @@ public partial class Form1 : Form
         }
 
         _teacherAgent = _teacherQueue.Dequeue()!.Clone();
-
-        _yellowMcts = champions[0].ToMctsCloned(MctsIterations);
+        _yellowMcts = championagent.ToMctsCloned(MctsIterations);
 
         var stopwatchOverall = Stopwatch.StartNew();
         while (i < ArenaIterations && !_arenaCancelationSource.IsCancellationRequested)
         {
             i++;
-            championToPlayAgainst--;
 
             // 1 Evaluate the trained network
-            textBox2.AddLine($" === Challenger {challengerAgent.LatestWinRate:f0}% " +
-                $"vs Champion {champions.Count - championToPlayAgainst} / {champions.Count} ===");
+            textBox2.AddLine($" === Challenger {challengerAgent.LatestWinRate:f0}% vs Champion ===");
             var stopwatch2 = Stopwatch.StartNew();
 
             _telemetryHistory.BeginAddingNewEntries();
@@ -127,8 +125,6 @@ public partial class Form1 : Form
                 _agentCatalog.SaveCatalog();
 
                 _telemetryHistory.ClearAll();
-
-                champions = [.. _agentCatalog.Entries.Values];
 
                 textBox2.AddLine($"Better added as Teacher. Teacher total: {_teacherQueue.Count}");
             }
@@ -172,8 +168,6 @@ public partial class Form1 : Form
 
                 textBox2.AddLine($"New teacher {_teacherAgent!.Generation} Teacher total: {_teacherQueue.Count}");
             }
-
-            championToPlayAgainst = champions.Count;
 
             // 2 play a minimum amont of self play games to refresh the telemetry history
             var stopwatch = Stopwatch.StartNew();
